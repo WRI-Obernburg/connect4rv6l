@@ -1,0 +1,14 @@
+{
+  "name": "connect4rv6l",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build_frontend": "cd localfrontend && bun run build"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "tsx": "^4.20.3"
+  }
+  
+}

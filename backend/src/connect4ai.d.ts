@@ -1,0 +1,1 @@
+declare module 'connect4-ai';
