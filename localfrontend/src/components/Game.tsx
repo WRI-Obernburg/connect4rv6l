@@ -1,6 +1,6 @@
 import QRCode from "react-qr-code"
 import type { GameState } from "../session"
-import GameField from "./GameField"
+import {GameField} from "component-lib";
 
 export default function Game(props: { gameState: GameState, qrCodeLink: string }) {
     return <div className="flex flex-row justify-center gap-16 items-center">
@@ -8,7 +8,7 @@ export default function Game(props: { gameState: GameState, qrCodeLink: string }
             <div className="text-7xl text-gray-600">
                 <CurrentAction gameState={props.gameState}></CurrentAction>
             </div>
-            <GameField gameState={props.gameState}></GameField>
+            <GameField board={props.gameState.board} interactive={false} xl={true}></GameField>
             <p className="font-bold self-center text-gray-600 text-4xl inline">Schwierigkeitsgrad: <DisplayDifficulty difficulty={props.gameState.difficulty}/></p>
 
         </div>

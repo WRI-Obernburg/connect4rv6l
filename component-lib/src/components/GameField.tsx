@@ -1,16 +1,18 @@
-import { GameState } from "@/interface/GameState";
-import { cn } from "@/lib/utils";
+"use client";
+import { cn } from "../lib/utils";
 import { MoveDown } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-
+import "../global.css"
 type GameFieldProps = {
-  gameState: GameState;
-  playerTurn: boolean;
-  onColumnClick: (columnIndex: number) => void;
+  board: number[][] | null,
+  xl: boolean,
+  isPlayerTurn?: boolean,
+  interactive: boolean,
+  onColumnClick?: (columnIndex: number) => void;
 };
 
-function RenderMoveIndicators({ playerTurn, isGameOver, onColumnClick }: { playerTurn: boolean; isGameOver: boolean; onColumnClick: (col: number) => void }) {
-  if (!playerTurn || isGameOver) return <div className="h-10" />;
+function RenderMoveIndicators({ playerTurn, onColumnClick }: { playerTurn: boolean; onColumnClick: (col: number) => void }) {
+  if (!playerTurn) return <div className="h-10" />;
   return (
     <div className="flex flex-row gap-2 justify-center">
       {Array.from({ length: 7 }).map((_, colIdx) => (
@@ -24,7 +26,7 @@ function RenderMoveIndicators({ playerTurn, isGameOver, onColumnClick }: { playe
   );
 }
 
-function RenderCell({ entryState, highlight }: { entryState: number | null; highlight?: boolean }) {
+function RenderCell({ entryState, highlight, xl }: { entryState: number | null; highlight?: boolean, xl:boolean }) {
   return (
     <div className="relative">
       {entryState != null && (
@@ -34,7 +36,7 @@ function RenderCell({ entryState, highlight }: { entryState: number | null; high
           exit={{ opacity: 0, y: -20 }}
           transition={{ duration: 0.4, type: "spring", bounce: 0.3 }}
           className={cn(
-            "w-10 h-10 border absolute rounded-full",
+            xl?"w-20 h-20":"w-10 h-10", "border absolute rounded-full",
             entryState === 1
               ? "bg-red-500"
               : entryState === 2
@@ -47,7 +49,7 @@ function RenderCell({ entryState, highlight }: { entryState: number | null; high
       )}
       <div
         className={cn(
-          "w-10 h-10 border rounded-full border-gray-500 shadow hover:shadow-lg transition-shadow flex items-center justify-center",        )}
+          xl?"w-20 h-20":"w-10 h-10", "border rounded-full border-gray-500 shadow hover:shadow-lg transition-shadow flex items-center justify-center",        )}
       />
     </div>
   );
@@ -64,7 +66,7 @@ function getWinningCells(board: number[][] | null): [number, number][] | null {
   ];
   for (let col = 0; col < 7; col++) {
     for (let row = 0; row < 6; row++) {
-      const player = board[col][row];
+      const player = board[col]![row]!;
       if (!player) continue;
       for (const [dx, dy] of directions) {
         const cells: [number, number][] = [[col, row]];
@@ -72,7 +74,7 @@ function getWinningCells(board: number[][] | null): [number, number][] | null {
           const nc = col + dx * k;
           const nr = row + dy * k;
           if (nc < 0 || nc >= 7 || nr < 0 || nr >= 6) break;
-          if (board[nc][nr] !== player) break;
+          if (board[nc]![nr] !== player) break;
           cells.push([nc, nr]);
         }
         if (cells.length === 4) return cells;
@@ -82,38 +84,33 @@ function getWinningCells(board: number[][] | null): [number, number][] | null {
   return null;
 }
 
-function RenderBoard({ board }: { board: number[][] | null }) {
+export default function GameField(props: GameFieldProps) {
   // board: [column][row], but we want to render as [col][row] with bottom at index 0
-  const winningCells = getWinningCells(board);
+  const winningCells = getWinningCells(props.board);
   return (
-    <div className="flex flex-row gap-2 justify-center rounded border border-gray-300 p-2">
+    <div className="flex flex-col gap-4 justify-center w-fit self-center">
+     {
+        props.interactive &&
+        <RenderMoveIndicators
+        playerTurn={props.isPlayerTurn!}
+        onColumnClick={props.onColumnClick!}
+      />
+      }
+      <div className={cn("flex flex-row justify-center rounded-lg border-gray-300", props.xl?"p-4 border-2 gap-4":"p-2 border gap-2")}>
       {Array.from({ length: 7 }).map((_, colIdx) => (
-        <div key={colIdx} className="flex flex-col gap-2">
+        <div key={colIdx} className={cn("flex flex-col", props.xl?"gap-4":"gap-2")}>
           <AnimatePresence>
             {Array.from({ length: 6 }).map((_, rowIdx) => {
               const boardRowIdx = 5 - rowIdx;
-              const entryState = board ? board[colIdx][boardRowIdx] : null;
+              const entryState = props.board ? props.board[colIdx]![boardRowIdx] : null;
               const highlight =
                 winningCells?.some(([c, r]) => c === colIdx && r === boardRowIdx) ?? false;
-              return <RenderCell key={rowIdx} entryState={entryState} highlight={highlight} />;
+              return <RenderCell key={rowIdx} entryState={entryState!} highlight={highlight} xl={props.xl} />;
             })}
           </AnimatePresence>
         </div>
       ))}
     </div>
-  );
-}
-
-export default function GameField({ gameState, playerTurn, onColumnClick }: GameFieldProps) {
-  // console.log(gameState.board);
-  return (
-    <div className="flex flex-col gap-4 justify-center w-fit self-center">
-      <RenderMoveIndicators
-        playerTurn={playerTurn}
-        isGameOver={gameState.isGameOver}
-        onColumnClick={onColumnClick}
-      />
-      <RenderBoard board={gameState.board} />
     </div>
   );
 }

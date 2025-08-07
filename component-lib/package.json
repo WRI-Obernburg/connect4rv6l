@@ -1,6 +1,7 @@
 {
-  "name": "components",
-  "module": "index.ts",
+  "name": "component-lib",
+  "main": "src/index.ts",
+  "module": "src/index.ts",
   "type": "module",
   "devDependencies": {
     "@chromatic-com/storybook": "^4.1.0",
@@ -35,4 +36,5 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   }
+  
 }

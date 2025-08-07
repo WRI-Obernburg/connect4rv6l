@@ -2,7 +2,6 @@ import { GameState } from "@/interface/GameState";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import useWebSocket from "react-use-websocket";
-import GameField from "./GameField";
 import { Button } from "@/components/ui/button"
 import {
     AlertDialog,
@@ -16,6 +15,7 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import DifficultyChooser from "./DifficulityChooser";
+import { GameField } from "component-lib";
 
 export default function Game(props: { sessionID: string }) {
 
@@ -103,7 +103,7 @@ export default function Game(props: { sessionID: string }) {
     return <div className="flex flex-col gap-4 justify-center mt-4 items-center">
         <CurrentAction gameState={gameState} />
 
-        <GameField gameState={gameState} onColumnClick={handleColumnClick} playerTurn={gameState.isHumanTurn && !gameState.isRobotInAction} />
+        <GameField board={gameState.board} interactive={true} xl={false} onColumnClick={handleColumnClick} isPlayerTurn={gameState.isHumanTurn && !gameState.isRobotInAction && !gameState.isGameOver} />
         <DifficultyChooser gameState={gameState} onDifficultyChange={handleDifficultyChange} ></DifficultyChooser>
 
         <StartGame onGameStart={() => {

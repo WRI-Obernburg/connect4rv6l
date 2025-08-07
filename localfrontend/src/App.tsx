@@ -4,7 +4,6 @@ import './App.css'
 import QRCodeComponent from './QRCode'
 import useWebSocket from 'react-use-websocket';
 import type { GameState } from './session';
-import GameField from './components/GameField';
 import Game from './components/Game';
 
 function App() {

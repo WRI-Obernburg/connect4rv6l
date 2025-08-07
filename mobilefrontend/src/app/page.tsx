@@ -2,6 +2,6 @@ import Image from "next/image";
 
 export default function Home() {
   return (
-   <div>RV6L Robot</div>
+   <div className="">RV6L Robot</div>
   );
 }
