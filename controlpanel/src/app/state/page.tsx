@@ -1,10 +1,20 @@
 "use client";
 import '@xyflow/react/dist/style.css';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog"
 import {ReactFlow, Handle, Position, Edge, Node} from '@xyflow/react';
 import {useContext, useEffect, useState, useReducer} from "react";
-import {GameDataContext} from "@/provider/WebsocketProvider";
+import {GameDataContext, WebsocketSendContext} from "@/provider/WebsocketProvider";
 import {Card, CardContent, CardFooter, CardHeader, CardTitle} from "@/components/ui/card";
 import {GameField} from "component-lib";
+import {Braces} from "lucide-react";
+import {Button} from "@/components/ui/button";
 
 type CustomNodeProps = {
 
@@ -13,13 +23,17 @@ type CustomNodeProps = {
     "expectedDuration": number;
     "startTime": string | null;
     "endTime": string | null;
+    stateData: unknown
 
 }
 
 // @ts-expect-error doesn't work
 const CustomNode: React.FC<CustomNodeProps> = ({data}) => {
+
     const [timeInState, setTimeInState] = useState(0);
     const [isSwitchingDialogOpen, setIsSwitchingDialogOpen] = useState(false);
+    const websocketSendContext = useContext(WebsocketSendContext);
+
     useEffect(()=>{
         if(data.active) {
             const id = setInterval(() => {
@@ -42,36 +56,62 @@ const CustomNode: React.FC<CustomNodeProps> = ({data}) => {
             }
         }
     },[data.active, data.endTime, data.label, data.startTime])
+    const stateData = JSON.stringify(data.stateData) ?? "Keine";
+    let shortData = stateData;
+    if (shortData.length > 12) {
+        shortData = stateData.substring(0, 12) + "...";
+    }
     return (
-        <div
-            style={{
-                padding: 10,
-                border: '1px solid #555',
-                borderRadius: 8,
-                background: data.active ? "#e1ef1e" : "#efefef",
-                fontWeight: 'bold',
-                textAlign: 'center',
-                position: 'relative',
-                width: 180,
-            }}
-            onDoubleClick={()=>{
-                //TODO
+        <Dialog open={isSwitchingDialogOpen} onOpenChange={setIsSwitchingDialogOpen}>
+            <div
+                style={{
+                    padding: 10,
+                    border: '1px solid #555',
+                    borderRadius: 8,
+                    background: data.active ? "#e1ef1e" : "#efefef",
+                    fontWeight: 'bold',
+                    textAlign: 'center',
+                    position: 'relative',
+                    width: 180,
+                }}
+                onDoubleClick={()=>{
+                    setIsSwitchingDialogOpen(true);
 
-            }}
+                }}
 
-            className={"flex flex-col justify-center"}
-        >
-            <Handle isConnectable={false} type="target" style={{opacity: "0%"}} position={Position.Top} id="top"/>
-            <Handle isConnectable={false} type="target" style={{opacity: "0%"}} position={Position.Left} id="left"/>
-            <Handle isConnectable={false} type="target" style={{opacity: "0%"}} position={Position.Right} id="right"/>
-            <Handle isConnectable={false} type="target" style={{opacity: "0%"}} position={Position.Bottom} id="bottom"/>
-            <p> {data.label}</p>
-            <p>{`${(Math.floor(timeInState / 100)/10).toFixed(1)} s / ${data.expectedDuration ? Math.floor(data.expectedDuration/1000) + " s" : "unbekannt"}`}</p>
-            <Handle isConnectable={false} type="source" style={{opacity: "0%"}} position={Position.Right} id="right"/>
-            <Handle isConnectable={false} type="source" style={{opacity: "0%"}} position={Position.Bottom} id="bottom"/>
-            <Handle isConnectable={false} type="source" style={{opacity: "0%"}} position={Position.Top} id="top"/>
-            <Handle isConnectable={false} type="source" style={{opacity: "0%"}} position={Position.Left} id="left"/>
-        </div>
+                className={"flex flex-col justify-center gap-1"}
+            >
+                <Handle isConnectable={false} type="target" style={{opacity: "0%"}} position={Position.Top} id="top"/>
+                <Handle isConnectable={false} type="target" style={{opacity: "0%"}} position={Position.Left} id="left"/>
+                <Handle isConnectable={false} type="target" style={{opacity: "0%"}} position={Position.Right} id="right"/>
+                <Handle isConnectable={false} type="target" style={{opacity: "0%"}} position={Position.Bottom} id="bottom"/>
+                <p> {data.label}</p>
+                <p>{`${(Math.floor(timeInState / 100)/10).toFixed(1)} s / ${data.expectedDuration ? Math.floor(data.expectedDuration/1000) + " s" : "unbekannt"}`}</p>
+                <p className={"flex flex-row gap-2 justify-center "}><Braces className={"p-0 inline"}/>{shortData}</p>
+                <Handle isConnectable={false} type="source" style={{opacity: "0%"}} position={Position.Right} id="right"/>
+                <Handle isConnectable={false} type="source" style={{opacity: "0%"}} position={Position.Bottom} id="bottom"/>
+                <Handle isConnectable={false} type="source" style={{opacity: "0%"}} position={Position.Top} id="top"/>
+                <Handle isConnectable={false} type="source" style={{opacity: "0%"}} position={Position.Left} id="left"/>
+            </div>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>{data.label}</DialogTitle>
+                    <DialogDescription className={"flex flex-col justify-start gap-2"}>
+                        <p>Zeitbudget: {data.expectedDuration ? Math.floor(data.expectedDuration/1000) + " s" : "Unbegrenzt"}</p>
+                        <p>Zuletzt benötigte Zeit: {(Math.floor(timeInState / 100)/10).toFixed(1)} s </p>
+                        <p>Daten: {stateData}</p>
+                        <Button onClick={()=>{
+                            websocketSendContext?.(JSON.stringify({
+                                action: "switchToState",
+                                stateName: data.label
+                            }));
+                            setIsSwitchingDialogOpen(false);
+                        }} className={"cursor-pointer self-end mt-4"}>Zum State wechseln</Button>
+                    </DialogDescription>
+                </DialogHeader>
+            </DialogContent>
+        </Dialog>
+
     );
 };
 const nodeTypes = {custom: CustomNode};
@@ -101,18 +141,18 @@ const edges: Edge[] = [
 
 ];
 const initialNodes: Node<CustomNodeProps>[] = [
-    {id: '1', type: 'custom', position: {x: 0, y: 100}, data: {label: 'PLAYER_SELECTION', active: false, endTime: null, startTime: null, expectedDuration: 0}},
-    {id: '2', type: 'custom', position: {x: 250, y: 100}, data: {label: 'GRAP_BLUE_CHIP', active: false, endTime: null, startTime: null, expectedDuration: 0}},
-    {id: '3', type: 'custom', position: {x: 500, y: 100}, data: {label: 'PLACE_BLUE_CHIP', active: false, endTime: null, startTime: null, expectedDuration: 0}},
-    {id: '4', type: 'custom', position: {x: 750, y: 100}, data: {label: 'ROBOT_SELECTION', active: false, endTime: null, startTime: null, expectedDuration: 0}},
-    {id: '5', type: 'custom', position: {x: 1000, y: 100}, data: {label: 'GRAP_RED_CHIP', active: false, endTime: null, startTime: null, expectedDuration: 0}},
-    {id: '6', type: 'custom', position: {x: 1250, y: 100}, data: {label: 'PLACE_RED_CHIP', active: false, endTime: null, startTime: null, expectedDuration: 0}},
-    {id: '7', type: 'custom', position: {x: 500, y: 300}, data: {label: 'PLAYER_WIN', active: false, endTime: null, startTime: null, expectedDuration: 0}},
-    {id: '8', type: 'custom', position: {x: 750, y: 300}, data: {label: 'TIE', active: false, endTime: null, startTime: null, expectedDuration: 0}},
-    {id: '9', type: 'custom', position: {x: 1250, y: 300}, data: {label: 'ROBOT_WIN', active: false, endTime: null, startTime: null, expectedDuration: 0}},
-    {id: '10', type: 'custom', position: {x: 750, y: 500}, data: {label: 'CLEAN_UP', active: false, endTime: null, startTime: null, expectedDuration: 0}},
-    {id: '11', type: 'custom', position: {x: 750, y: 700}, data: {label: 'IDLE', active: false, endTime: null, startTime: null, expectedDuration: 0}},
-    {id: '12', type: 'custom', position: {x: 1500, y: 100}, data: {label: 'ERROR', active: false, endTime: null, startTime: null, expectedDuration: 0}},
+    {id: '1', type: 'custom', position: {x: 0, y: 100}, data: {label: 'PLAYER_SELECTION', active: false, endTime: null, startTime: null, expectedDuration: 0, stateData: null}},
+    {id: '2', type: 'custom', position: {x: 250, y: 100}, data: {label: 'GRAP_BLUE_CHIP', active: false, endTime: null, startTime: null, expectedDuration: 0, stateData: null}},
+    {id: '3', type: 'custom', position: {x: 500, y: 100}, data: {label: 'PLACE_BLUE_CHIP', active: false, endTime: null, startTime: null, expectedDuration: 0, stateData: null}},
+    {id: '4', type: 'custom', position: {x: 750, y: 100}, data: {label: 'ROBOT_SELECTION', active: false, endTime: null, startTime: null, expectedDuration: 0, stateData: null}},
+    {id: '5', type: 'custom', position: {x: 1000, y: 100}, data: {label: 'GRAP_RED_CHIP', active: false, endTime: null, startTime: null, expectedDuration: 0, stateData: null}},
+    {id: '6', type: 'custom', position: {x: 1250, y: 100}, data: {label: 'PLACE_RED_CHIP', active: false, endTime: null, startTime: null, expectedDuration: 0, stateData: null}},
+    {id: '7', type: 'custom', position: {x: 500, y: 300}, data: {label: 'PLAYER_WIN', active: false, endTime: null, startTime: null, expectedDuration: 0, stateData: null}},
+    {id: '8', type: 'custom', position: {x: 750, y: 300}, data: {label: 'TIE', active: false, endTime: null, startTime: null, expectedDuration: 0, stateData: null}},
+    {id: '9', type: 'custom', position: {x: 1250, y: 300}, data: {label: 'ROBOT_WIN', active: false, endTime: null, startTime: null, expectedDuration: 0, stateData: null}},
+    {id: '10', type: 'custom', position: {x: 750, y: 500}, data: {label: 'CLEAN_UP', active: false, endTime: null, startTime: null, expectedDuration: 0, stateData: null}},
+    {id: '11', type: 'custom', position: {x: 750, y: 700}, data: {label: 'IDLE', active: false, endTime: null, startTime: null, expectedDuration: 0, stateData: null}},
+    {id: '12', type: 'custom', position: {x: 1500, y: 100}, data: {label: 'ERROR', active: false, endTime: null, startTime: null, expectedDuration: 0, stateData: null}},
 ];
 
 function StateGraph() {
@@ -137,6 +177,7 @@ function StateGraph() {
                             expectedDuration: stateData!.expectedDuration!,
                             startTime: stateData.startTime != null ? stateData.startTime.toString() : null,
                             endTime: stateData!.endTime != null ? stateData!.endTime.toString() : null,
+                            stateData: stateData.stateData
                         }
                     } satisfies Node<CustomNodeProps>
                 })

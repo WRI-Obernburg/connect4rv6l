@@ -81,6 +81,12 @@ export default function Game(props: { sessionID: string }) {
         </div>
     }
 
+    if(gameState.stateName === "ERROR") {
+        return <div className="flex flex-col gap-4 justify-center mt-4">
+            <div className="text-center text-2xl font-bold text-red-500">Das System ist zur Zeit außer Betrieb</div>
+        </div>
+    }
+
     if (gameState.stateName === "IDLE") {
         return <div className="flex flex-col gap-4 justify-center self-center w-fit mt-4">
             <div className="text-center text-2xl font-bold">Spiel ist noch nicht gestartet</div>
@@ -124,6 +130,10 @@ function CurrentAction(props: { gameState: GameState }) {
 
     if (props.gameState.stateName === "PLAYER_WIN") {
         return <div className="text-center text-2xl font-bold">Du hast gewonnen!</div>
+    }
+
+    if (props.gameState.stateName === "TIE") {
+        return <div className="text-center text-2xl font-bold">Das Spiel endet unentschieden!</div>
     }
 
     if (["GRAP_BLUE_CHIP", "PLACE_BLUE_CHIP"].includes(props.gameState.stateName)) {

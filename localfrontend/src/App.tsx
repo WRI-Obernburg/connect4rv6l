@@ -50,8 +50,16 @@ function App() {
     </div>
   }
 
-  if(!state.isPlayerConnected || (!state.isGameOver && !state.isGameRunning)) {
-    return <QRCodeComponent qrCodeLink={qrCodeLink} isGameRunning={state.isGameRunning}/>
+  if(state.stateName === "ERROR") {
+    return <div className='flex flex-col items-center justify-center gap-4 w-screen h-screen'>
+      <h1 className='text-8xl text-red-500 font-bold'>Fehler</h1>
+      <p className='text-gray-600 text-4xl font-bold'>Aktuell ist das System außer Betrieb.</p>
+      <p className='text-gray-600 text-3xl'>Bitte versuche es später erneut</p>
+    </div>
+  }
+
+  if(!state.isPlayerConnected || (state.stateName === "IDLE") ) {
+    return <QRCodeComponent qrCodeLink={qrCodeLink} isGameRunning={state.stateName !== "IDLE"}/>
   }
 
   return (

@@ -52,5 +52,6 @@ export interface GameData {
         moving: boolean
     },
     qrCodeLink: string,
-    errors: ErrorDescription[]
+    errors: ErrorDescription[],
+    isInternalFrontendConnected: boolean
 }

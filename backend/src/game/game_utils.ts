@@ -1,4 +1,5 @@
 import {playerDataStream} from "../game_server.ts";
+import {ErrorType, throwError} from "../errorHandler/error_handler.ts";
 
 
 export function playerSelection(): {promise: Promise<number>, abort: () => void} {
@@ -36,7 +37,14 @@ export class PlayerSelectionAbortError extends Error {
     }
 }
 
-const raceTimeout = (ms: number) => new Promise((_, reject) => setTimeout(reject, ms));
+const raceTimeout = (ms: number) => new Promise((_, reject) => setTimeout(()=>{
+    throwError({
+        errorType: ErrorType.WARNING,
+        description: `Operation timed out after ${ms} ms`,
+        date: new Date().toString()
+    })
+    reject();
+}, ms));
 
 export async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
     return await Promise.race([promise, raceTimeout(ms)]) as Promise<T>;

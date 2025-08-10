@@ -32,7 +32,7 @@ export default function RootLayout({
       >
       <SidebarProvider>
           <AppSidebar />
-          <main className={"w-full m-8"}>
+          <main className={"w-full m-8 flex flex-col"}>
               <WebsocketProvider>
                   {children}
               </WebsocketProvider>

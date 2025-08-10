@@ -41,6 +41,11 @@ export function applyGameMove() {
     state.board = JSON.parse(JSON.stringify(game.board));
 }
 
+export function setBoard(board: Dict<number[]>) {
+    game.board = board;
+    applyGameMove();
+}
+
 export function checkGameState() {
     const gameStatus = game.gameStatus();
 

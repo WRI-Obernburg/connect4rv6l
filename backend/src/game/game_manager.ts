@@ -381,7 +381,7 @@ GameManager = {
             console.error("Error during state transition:", e);
             GameManager.raiseError({
                 errorType: ErrorType.FATAL,
-                description: "An error occurred during state " + callingState.stateName + " error: " + e.name,
+                description: "An error occurred during state " + callingState.stateName,
                 date: new Date().toString()
             });
             return;

@@ -55,7 +55,7 @@ export default function WebsocketProvider({
     <GameDataContext value={gameData!}>
         <WebsocketSendContext value={sendMessage}>
 
-      <div className="flex-1 overflow-y-auto">{children}</div>
+      <div className="flex-1 flex flex-col overflow-y-auto">{children}</div>
         </WebsocketSendContext>
     </GameDataContext>
   );

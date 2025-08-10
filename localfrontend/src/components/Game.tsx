@@ -13,7 +13,7 @@ export default function Game(props: { gameState: GameState, qrCodeLink: string }
 
         </div>
         {
-            props.gameState.isGameOver && <div className="flex flex-col justify-center gap-4 items-center">
+            ["TIE", "PLAYER_WIN", "ROBOT_WIN"].includes(props.gameState.stateName) && <div className="flex flex-col justify-center gap-4 items-center">
                 <div className="text-4xl font-bold text-gray-500">Revanche?</div>
                 <QRCode value={props.qrCodeLink}></QRCode>
             </div>
@@ -24,27 +24,31 @@ export default function Game(props: { gameState: GameState, qrCodeLink: string }
 
 function CurrentAction(props: { gameState: GameState }) {
 
-    if(props.gameState.isPhysicalBoardClearing) {
+    if(props.gameState.stateName === "CLEAN_UP") {
         return <div className="text-center font-bold">Das Spielfeld wird geleert...</div>
     }
 
-    if (props.gameState.isGameOver && props.gameState.winner === 2) {
+    if (props.gameState.stateName === "ROBOT_WIN") {
         return <div className="text-center  font-bold">Der Roboter hat gewonnen!</div>
     }
 
-    if (props.gameState.isGameOver && props.gameState.winner === 1) {
+    if (props.gameState.stateName === "PLAYER_WIN") {
         return <div className="text-center  font-bold">Du hast gewonnen!</div>
     }
 
-    if (props.gameState.isRobotInAction && props.gameState.isHumanTurn) {
+    if(props.gameState.stateName === "TIE") {
+        return <div className="text-center  font-bold">Unentschieden!</div>
+    }
+
+    if (["GRAP_BLUE_CHIP", "PLACE_BLUE_CHIP"].includes(props.gameState.stateName)) {
         return <div className="text-center  font-bold">Der Roboter setzt deinen Chip...</div>
     }
 
-    if (!props.gameState.isHumanTurn) {
+    if (["ROBOT_SELECTION", "GRAP_RED_CHIP", "PLACE_RED_CHIP"].includes(props.gameState.stateName)) {
         return <div className="text-center  font-bold">Der Roboter ist am Zug...</div>
     }
 
-    if (props.gameState.isHumanTurn) {
+    if (props.gameState.stateName === "PLAYER_SELECTION") {
         return <div className="text-center  font-bold">Du bist am Zug!</div>
     }
 

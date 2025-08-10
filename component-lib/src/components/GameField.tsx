@@ -4,24 +4,30 @@ import { MoveDown } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import "../global.css"
 type GameFieldProps = {
-  board: number[][] | null,
+  board: Dict<number[]> | null,
   xl: boolean,
   isPlayerTurn?: boolean,
   interactive: boolean,
   onColumnClick?: (columnIndex: number) => void;
 };
 
-function RenderMoveIndicators({ playerTurn, onColumnClick }: { playerTurn: boolean; onColumnClick: (col: number) => void }) {
+function RenderMoveIndicators({ playerTurn, onColumnClick, board }: { playerTurn: boolean; onColumnClick: (col: number) => void, board: Dict<number[]> }) {
   if (!playerTurn) return <div className="h-10" />;
   return (
     <div className="flex flex-row gap-2 justify-center">
-      {Array.from({ length: 7 }).map((_, colIdx) => (
-        <MoveDown
-          key={colIdx}
-          className="w-10 h-10 p-1 text-red-500 hover:bg-gray-300 active:bg-gray-300 rounded cursor-pointer"
-          onClick={() => onColumnClick(colIdx)}
-        />
-      ))}
+      {Array.from({ length: 7 }).map((_, colIdx) => {
+              if (board != null && board[colIdx] != null && board[colIdx].length >= 6) {
+                  return <div key={colIdx} className="w-10 h-10"/>;
+              } else {
+                  return <MoveDown
+                      key={colIdx}
+                      className="w-10 h-10 p-1 text-red-500 hover:bg-gray-300 active:bg-gray-300 rounded cursor-pointer"
+                      onClick={() => onColumnClick(colIdx)}
+                  />
+              }
+          }
+
+      )}
     </div>
   );
 }
@@ -56,7 +62,7 @@ function RenderCell({ entryState, highlight, xl }: { entryState: number | null; 
 }
 
 // Helper to find four-in-a-row and return their coordinates
-function getWinningCells(board: number[][] | null): [number, number][] | null {
+function getWinningCells(board: Dict<number[]> | null): [number, number][] | null {
   if (!board) return null;
   const directions: [number, number][] = [
     [1, 0], // horizontal
@@ -94,6 +100,7 @@ export default function GameField(props: GameFieldProps) {
         <RenderMoveIndicators
         playerTurn={props.isPlayerTurn!}
         onColumnClick={props.onColumnClick!}
+        board={props.board!}
       />
       }
       <div className={cn("flex flex-row justify-center rounded-lg border-gray-300", props.xl?"p-4 border-2 gap-4":"p-2 border gap-2")}>

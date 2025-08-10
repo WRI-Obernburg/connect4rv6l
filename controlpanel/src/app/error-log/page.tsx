@@ -15,7 +15,7 @@ export default function ErrorLogPage() {
     return <div>
         <Card className={"p-4"}>
             <CardHeader>
-                <CardTitle>State-Graph</CardTitle>
+                <CardTitle>Error Log</CardTitle>
 
             </CardHeader>
             <CardContent>

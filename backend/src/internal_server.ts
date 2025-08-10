@@ -3,9 +3,9 @@ import {GameManager, gameStates} from "./game/game_manager.ts";
 const port = 4000;
 import express from 'express';
 import WebSocket from 'ws';
-import { resetGame } from './game/game.ts';
+import {resetGame, setBoard} from './game/game.ts';
 import { FRONTEND_ADRESS } from './index';
-import { state } from './state';
+import {sendState, state} from './state';
 import cors from 'cors';
 import expressWs from 'express-ws'
 import { v4 as uuidv4 } from 'uuid';
@@ -28,14 +28,14 @@ export const connectionID = uuidv4();
 export let sendStateToInternalClient: (() => void) | null = null;
 export let sendStateToControlPanelClient: (() => void) | null = null;
 
+let isInternalFrontendConnected = false;
 
 export function initInternalServer() {
-
 
     //server localfrontend in /localfrontend/dist but only if the request is from localhost
     app.use('/localfrontend', (req, res, next) => {
         if (req.hostname === 'localhost') {
-            express.static('localfrontend/dist')(req, res, next);
+            express.static('../localfrontend/dist')(req, res, next);
         } else {
             res.status(403).send('Forbidden');
         }
@@ -50,6 +50,9 @@ export function initInternalServer() {
         }
         sendInternalState(ws);
 
+        isInternalFrontendConnected = true;
+        sendStateToControlPanelClient?.();
+
 
         console.log('Internal WebSocket connection established');
 
@@ -60,6 +63,8 @@ export function initInternalServer() {
         ws.on('close', () => {
             console.log('WebSocket connection closed');
             sendStateToInternalClient = null;
+            isInternalFrontendConnected = false;
+            sendStateToControlPanelClient?.();
         });
 
     });
@@ -90,29 +95,37 @@ export function initInternalServer() {
                         return;
                     } else {
                         console.log('Switching to state:', data.stateName);
-                        GameManager.switchState(data.stateName, data.stateData);
+                        GameManager.switchState(gameStates[data.stateName as keyof typeof gameStates], data.stateData);
                         GameManager.handleStateTransition(GameManager.currentGameState.action(data.stateData), GameManager.currentGameState);
-                    }
-                } else if(data.action === "control"){
-                    if (data.command === "gripper_on") {
-                       await toggleGripper(true);
                         sendStateToControlPanelClient!();
-                    }else if (data.command === "gripper_off") {
+                    }
+                } else if(data.action === "control") {
+                    if (data.command === "gripper_on") {
+                        await toggleGripper(true);
+                        sendStateToControlPanelClient!();
+                    } else if (data.command === "gripper_off") {
                         await toggleGripper(false);
                         sendStateToControlPanelClient!();
-                    }else if (data.command === "move_to_blue") {
+                    } else if (data.command === "move_to_blue") {
                         await moveToBlue();
                         sendStateToControlPanelClient!();
-                    }else if(data.command === "move_to_red") {
+                    } else if (data.command === "move_to_red") {
                         await moveToRed()
                         sendStateToControlPanelClient!();
-                    }else if(data.command === "move_to_column") {
-                        if(data.column != null && typeof data.column === 'number') {
+                    } else if (data.command === "move_to_column") {
+                        if (data.column != null && typeof data.column === 'number') {
                             await moveToColumn(data.column);
                             sendStateToControlPanelClient!();
                         }
                     }
+                }else if(data.action === "setBoard") {
+                    if (data.board && typeof data.board === 'object') {
+                        setBoard(data.board);
+                        sendState()
 
+                    } else {
+                        console.warn('Invalid board data received:', data.board);
+                    }
                 } else {
                     console.warn('Unknown action received:', data.action);
                 }
@@ -150,7 +163,8 @@ function sendControlPanelState(ws: WebSocket) {
                 moving: rv6l_moving,
             },
             qrCodeLink: FRONTEND_ADRESS + "/play?sessionID=" + sessionState.currentSessionID,
-            errors: errors
+            errors: errors,
+            isInternalFrontendConnected: isInternalFrontendConnected
         }
         ws.send(JSON.stringify(data));
     } else {

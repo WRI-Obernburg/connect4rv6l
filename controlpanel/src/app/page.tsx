@@ -1,30 +1,26 @@
 "use client";
-import {
-    Card,
-    CardAction,
-    CardContent,
-    CardDescription,
-    CardFooter,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
+import {Card, CardContent, CardFooter, CardHeader, CardTitle,} from "@/components/ui/card"
 import QRCode from "react-qr-code"
 
 import {GameField} from "component-lib";
-import {useContext, useEffect, useRef, useState} from "react";
+import {useContext, useEffect, useState} from "react";
 import {GameDataContext} from "@/provider/WebsocketProvider";
 import Link from "next/link";
 import {ExternalLink} from "lucide-react";
-import {GameData} from "@/app/models/GameData";
+import {ErrorType, GameData} from "@/app/models/GameData";
+
 export default function Overview() {
     const gameDataContext = useContext(GameDataContext);
     if (!gameDataContext) {
         return <div>Loading...</div>;
     }
     return (
-    <div className={"flex justify-center gap-4"}>
-        <GameFieldCard gameData={gameDataContext!}></GameFieldCard>
-        <FrontendConnectQRCode gameData={gameDataContext!}></FrontendConnectQRCode>
+    <div className={"flex flex-col gap-4 justify-evenly w-fit self-center"}>
+        <div className={"flex justify-center gap-4"}>
+            <GameFieldCard gameData={gameDataContext!}></GameFieldCard>
+            <FrontendConnectQRCode gameData={gameDataContext!}></FrontendConnectQRCode>
+        </div>
+        <GeneralInfos gameData={gameDataContext!}/>
     </div>
   );
 }
@@ -75,8 +71,32 @@ function FrontendConnectQRCode(props: {gameData: GameData}) {
             }
         </CardContent>
         <CardFooter>
-            <p><Link className={"flex flex-row gap-2 underline underline-offset-4"} target={"_blank"} href={props.gameData.qrCodeLink}><ExternalLink/> Mobilefrontend</Link></p>
+            <p className={"flex flex-col gap-2"}>
+                <Link className={"flex flex-row gap-2 underline underline-offset-4"} target={"_blank"} href={props.gameData.qrCodeLink}><ExternalLink/> Mobilefrontend</Link>
+                <Link className={"flex flex-row gap-2 underline underline-offset-4"} target={"_blank"} href={"http://localhost:4000/localfrontend"}><ExternalLink/> Localfronted</Link>
+            </p>
         </CardFooter>
     </Card>
 }
 
+function GeneralInfos(props: {gameData: GameData}) {
+    return <Card className={"p-4 grow"}>
+        <CardHeader>
+            <CardTitle>Übersicht</CardTitle>
+        </CardHeader>
+        <CardContent>
+            <p>RV6L: {`${props.gameData.rv6l.connected?"Verbunden":"Getrennt"} | ${props.gameData.rv6l.moving?"Bewegung":"Stillstand"} | MSG-Counter: ${props.gameData.rv6l.messageCounter}`}</p>
+            <p>Schwierigkeitsgrad: {props.gameData.gameState.difficulty}</p>
+            <p>Spieler: {props.gameData.gameState.isPlayerConnected?"verbunden":"Kein Spieler verbunden"}</p>
+            <p>Letztes Spiel um: {new Date(props.gameData.gameState.gameStartTime).toLocaleString()}</p>
+            <p>Kritische Fehler: {props.gameData.errors.reduce((acc, e)=>{
+                if(e.errorType === ErrorType.FATAL) {
+                    return acc+ 1;
+                }else{
+                    return acc;
+                }
+            },0)}</p>
+            <p>Internes Frontend: {props.gameData.isInternalFrontendConnected?"Verbunden":"Getrennt"}</p>
+        </CardContent>
+    </Card>
+}
