@@ -14,7 +14,7 @@ import {GameField} from "component-lib";
 import {useContext, useEffect, useRef, useState} from "react";
 import {GameData, GameDataContext} from "@/provider/WebsocketProvider";
 import Link from "next/link";
-import {ExternalLink, QrCode} from "lucide-react";
+import {ExternalLink} from "lucide-react";
 export default function Overview() {
     const gameDataContext = useContext(GameDataContext);
     if (!gameDataContext) {
@@ -53,7 +53,7 @@ function GameFieldCard(props: {gameData: GameData}) {
                 <GameField board={props.gameData.gameState.board} xl={false} interactive={false}></GameField>
             }
         </CardContent>
-        <CardFooter className={"flex flex-col gap-4"}>
+        <CardFooter className={"flex flex-col gap-2"}>
             <p>Zustand: {props.gameData.gameState.stateName}</p>
             <p>{
                 `Aktuelle Dauer: ${(Math.floor(timeInState / 100)/10).toFixed(1)} s / ${expectedDuration ? Math.floor(expectedDuration/1000) + " s" : "unbekannt"}`

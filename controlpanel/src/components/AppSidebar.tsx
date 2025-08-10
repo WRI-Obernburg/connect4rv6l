@@ -48,7 +48,7 @@ export function AppSidebar() {
         <Sidebar>
             <SidebarContent>
                 <SidebarGroup>
-                    <SidebarGroupLabel>RV6l Controlpanel</SidebarGroupLabel>
+                    <SidebarGroupLabel>RV6L Controlpanel</SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
                             {items.map((item) => (

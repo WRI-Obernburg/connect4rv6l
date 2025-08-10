@@ -38,7 +38,7 @@ export default function RootLayout({
               </WebsocketProvider>
           </main>
       </SidebarProvider>
-        {children}
+
       </body>
     </html>
   );
