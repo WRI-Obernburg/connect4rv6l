@@ -1,5 +1,4 @@
 import { GameState } from "@/interface/GameState";
-import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import useWebSocket from "react-use-websocket";
 import { Button } from "@/components/ui/button"
@@ -29,7 +28,7 @@ export default function Game(props: { sessionID: string }) {
         lastJsonMessage,
         readyState,
         getWebSocket,
-    } = useWebSocket("http://192.168.178.53:3000/play?sessionID=" + props.sessionID, {
+    } = useWebSocket("http://localhost:3000/play?sessionID=" + props.sessionID, {
         onOpen: () => console.log('opened'),
         onMessage: (message) => {
             console.log('message received', message);
@@ -49,7 +48,7 @@ export default function Game(props: { sessionID: string }) {
 
     function handleColumnClick(columnIndex: number) {
         console.log('Column clicked:', columnIndex);
-        if (gameState && gameState.isHumanTurn && !gameState.isGameOver) {
+        if (gameState && gameState.stateName == "PLAYER_SELECTION") {
             sendJsonMessage({
                 type: "placeChip",
                 slot: columnIndex,
@@ -82,10 +81,10 @@ export default function Game(props: { sessionID: string }) {
         </div>
     }
 
-    if (!gameState.isGameRunning && !gameState.isGameOver) {
+    if (gameState.stateName === "IDLE") {
         return <div className="flex flex-col gap-4 justify-center self-center w-fit mt-4">
             <div className="text-center text-2xl font-bold">Spiel ist noch nicht gestartet</div>
-            <StartGame isRobotInAction={false} onGameStart={() => {
+            <StartGame gameState={gameState.stateName} onGameStart={() => {
                 sendJsonMessage({
                     type: "startGame",
                 });
@@ -93,7 +92,7 @@ export default function Game(props: { sessionID: string }) {
         </div>
     }
 
-    if (gameState.isPhysicalBoardClearing) {
+    if (gameState.stateName === "CLEAN_UP") {
         return <div className="flex flex-col gap-4 justify-center mt-4">
             <div className="text-center text-2xl font-bold">Das Spielfeld wird geleert...</div>
             <div className="text-center">Bitte warte einen Moment</div>
@@ -103,14 +102,14 @@ export default function Game(props: { sessionID: string }) {
     return <div className="flex flex-col gap-4 justify-center mt-4 items-center">
         <CurrentAction gameState={gameState} />
 
-        <GameField board={gameState.board} interactive={true} xl={false} onColumnClick={handleColumnClick} isPlayerTurn={gameState.isHumanTurn && !gameState.isRobotInAction && !gameState.isGameOver} />
+        <GameField board={gameState.board} interactive={true} xl={false} onColumnClick={handleColumnClick} isPlayerTurn={gameState.stateName === "PLAYER_SELECTION"} />
         <DifficultyChooser gameState={gameState} onDifficultyChange={handleDifficultyChange} ></DifficultyChooser>
 
         <StartGame onGameStart={() => {
             sendJsonMessage({
                 type: "startGame",
             });
-        }} isGameRunning={gameState.isGameRunning} isRobotInAction={gameState.isRobotInAction} />
+        }} gameState={gameState.stateName} />
 
     </div>
 
@@ -119,23 +118,23 @@ export default function Game(props: { sessionID: string }) {
 function CurrentAction(props: { gameState: GameState }) {
 
 
-    if (props.gameState.isGameOver && props.gameState.winner === 2) {
+    if (props.gameState.stateName === "ROBOT_WIN") {
         return <div className="text-center text-2xl font-bold">Der Roboter hat gewonnen!</div>
     }
 
-    if (props.gameState.isGameOver && props.gameState.winner === 1) {
+    if (props.gameState.stateName === "PLAYER_WIN") {
         return <div className="text-center text-2xl font-bold">Du hast gewonnen!</div>
     }
 
-    if (props.gameState.isRobotInAction && props.gameState.isHumanTurn) {
+    if (["GRAP_BLUE_CHIP", "PLACE_BLUE_CHIP"].includes(props.gameState.stateName)) {
         return <div className="text-center text-2xl font-bold">Der Roboter setzt deinen Chip...</div>
     }
 
-    if (!props.gameState.isHumanTurn) {
+    if (["ROBOT_SELECTION", "GRAP_RED_CHIP", "PLACE_RED_CHIP"].includes(props.gameState.stateName)) {
         return <div className="text-center text-2xl font-bold">Der Roboter ist am Zug...</div>
     }
 
-    if (props.gameState.isHumanTurn) {
+    if (props.gameState.stateName === "PLAYER_SELECTION") {
         return <div className="text-center text-2xl font-bold">Du bist am Zug!</div>
     }
 
@@ -144,12 +143,15 @@ function CurrentAction(props: { gameState: GameState }) {
 }
 
 
-function StartGame(props: { onGameStart: () => void, isGameRunning?: boolean, isRobotInAction: boolean }) {
+function StartGame(props: { onGameStart: () => void, gameState: string }) {
 
-    if (props.isGameRunning) {
+
+    const isRestartable = ["ROBOT_WIN", "PLAYER_WIN", "TIE", "PLAYER_SELECTION", "IDLE"].includes(props.gameState)
+
+    if (props.gameState != "IDLE") {
         return <AlertDialog>
             <AlertDialogTrigger asChild>
-                <Button disabled={props.isRobotInAction} className="bg-green-600 text-white px-4 py-2 w-fit self-center rounded cursor-pointer">
+                <Button disabled={!isRestartable} className="bg-green-600 text-white px-4 py-2 w-fit self-center rounded cursor-pointer">
                     Spiel neustarten
                 </Button>
             </AlertDialogTrigger>
@@ -168,7 +170,7 @@ function StartGame(props: { onGameStart: () => void, isGameRunning?: boolean, is
         </AlertDialog>
     } else {
 
-        return <Button disabled={props.isRobotInAction} onClick={props.onGameStart} className="bg-green-600 text-white px-4 py-2 w-fit self-center rounded cursor-pointer">
+        return <Button disabled={!isRestartable} onClick={props.onGameStart} className="bg-green-600 text-white px-4 py-2 w-fit self-center rounded cursor-pointer">
             Spiel starten
         </Button>
 

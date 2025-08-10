@@ -13,7 +13,8 @@
   "workspaces":[
     "./component-lib",
     "./mobilefrontend",
-    "./localfrontend"
+    "./localfrontend",
+    "./controlpanel"
   ]
   
 }

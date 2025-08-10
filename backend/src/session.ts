@@ -1,5 +1,5 @@
 import { FRONTEND_ADRESS } from ".";
-import { sendStateToInternalClient } from "./internal_server";
+import {sendStateToControlPanelClient, sendStateToInternalClient} from "./internal_server";
 import { state } from "./state";
 import { v4 as uuidv4 } from 'uuid';
 
@@ -24,6 +24,7 @@ export function initSession() {
             //TODO refresh frontend
             printSessionInfo();
             sendStateToInternalClient?.();
+            sendStateToControlPanelClient?.();
         }, 1000 * 60 * 10); // 10 minutes
 }
 

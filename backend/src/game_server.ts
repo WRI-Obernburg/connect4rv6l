@@ -1,16 +1,20 @@
 import express from "express";
-import { sendState, state } from "./state";
+import {sendState, state} from "./state";
 import expressWs from 'express-ws'
-import { playMove, resetGame } from "./game";
+import {playMove, resetGame} from "./game/game.ts";
 import cors from 'cors';
-import { initSession, sessionState } from "./session";
-import { sendStateToInternalClient } from "./internal_server";
+import {initSession, sessionState} from "./session";
+import {sendStateToControlPanelClient, sendStateToInternalClient} from "./internal_server";
+import stream from "stream";
+import {GameManager} from "./game/game_manager.ts";
 
 const port = 3000
 
 const app = expressWs(express()).app;
 
 app.use(cors());
+
+export const playerDataStream = new stream.PassThrough();
 
 
 export let sendStateToClient: (() => void) | null = null;
@@ -21,18 +25,11 @@ export function initServer() {
     initSession();
 
     setInterval(async () => {
-        if (Date.now() - state.lastUserInteraction > 1000 * 60 * 2 && !state.isGameFieldReady) { // 2 minutes
+        if (Date.now() - state.lastUserInteraction > 1000 * 60 * 2 && state.stateName != "IDLE") { // 2 minutes
             console.log("No user interaction for 2 minutes, resetting game state.");
-            resetGame();
-            await prepareNewGame();
-            state.isGameRunning = false;
-            state.isHumanTurn = true;
-            state.isGameOver = false;
-            state.isGameFieldReady = true;
-            sendState();
+            GameManager.resetGame(false);
         }
     }, 1000 * 60); // Check every minute
-
 
 
     app.get('/state', (req, res) => {
@@ -41,8 +38,9 @@ export function initServer() {
 
     app.ws('/play', function (ws, req) {
         const sessionID = req.query.sessionID;
+        console.log("sessionID", sessionID);
         let isPlayer = false;
-        if (sessionID && (sessionID === previousSessionID || sessionID === sessionState.currentSessionID)) { //TODO remove true here
+        if (sessionID && (sessionID === previousSessionID || sessionID === sessionState.currentSessionID) || true) { //TODO remove true here
             console.log(`WebSocket connection established with session ID: ${sessionID}`);
 
             state.isPlayerConnected = true;
@@ -74,7 +72,7 @@ export function initServer() {
                 }
 
                 if (parsedMSG.type === "startGame") {
-                    prepareNewGame();
+                    GameManager.startNewGame();
                 }
 
                 if (parsedMSG.type === "setDifficulty") {
@@ -90,6 +88,7 @@ export function initServer() {
 
             } catch (e) {
                 console.error('Error parsing message:', e);
+                console.log("ERROR")
                 return;
             }
         });
@@ -99,12 +98,8 @@ export function initServer() {
             if (isPlayer) {
                 sendStateToClient = null; // Clear the function when the connection is closed
                 state.isPlayerConnected = false;
-                if (state.isGameOver) {
-                    state.isGameRunning = false;
-                }
-
                 sendStateToInternalClient?.();
-
+                sendStateToControlPanelClient?.();
             }
         });
     });
@@ -117,39 +112,12 @@ export function initServer() {
 
 function handlePlaceChip(parsedMSG: any) {
     if (parsedMSG.slot != null && !isNaN(parsedMSG.slot) && parsedMSG.slot >= 0 && parsedMSG.slot < 7) {
-        if (state.isGameRunning && state.isHumanTurn && !state.isRobotInAction && !state.isGameOver) {
-            state.lastUserInteraction = Date.now();
-            playMove(parsedMSG.slot);
-            sendState();
-
-        } else {
-            console.log('Game is not running or it is not the player\'s turn.');
-        }
+        playerDataStream.write(JSON.stringify({
+            slot: parsedMSG.slot,
+            type: "placeChip"
+        }));
     } else {
         console.error('Invalid slot number provided for placing chip. ' + parsedMSG.slot);
     }
 }
 
-function prepareNewGame(): Promise<void> {
-    return new Promise((resolve) => {
-        if (!state.isRobotInAction) {
-            resetGame();
-            //TODO clear physical board
-
-            state.isGameRunning = true;
-            state.gameStartTime = Date.now();
-            if (state.isGameFieldReady) {
-                state.isGameFieldReady = false;
-            } else {
-                state.isPhysicalBoardClearing = true;
-                setTimeout(() => {
-                    state.isPhysicalBoardClearing = false;
-                    sendState();
-                    resolve();
-                }, 1000 * 5); // Clear physical board after 5 seconds
-
-            }
-            sendState();
-        }
-    });
-}

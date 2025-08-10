@@ -1,10 +1,11 @@
 import open, { apps } from "open";
 import { initServer } from "./game_server";
 import { initInternalServer } from "./internal_server";
+import {initRV6LClient} from "./rv6l_client.ts";
 
-export const FRONTEND_ADRESS = process.env.FRONTEND_ADRESS || "http://192.168.178.53:8080";
+export const FRONTEND_ADRESS = process.env.FRONTEND_ADRESS || "http://localhost:8080";
 
-
+initRV6LClient();
 initServer();
 initInternalServer();
 
