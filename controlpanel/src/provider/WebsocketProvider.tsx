@@ -3,53 +3,14 @@
 
 import {createContext, useState} from "react";
 import useWebSocket from "react-use-websocket";
+import {GameData} from "@/app/models/GameData";
 
-interface GameState {
-    expectedDuration: number | null;
-    startTime: Date | null;
-    endTime: Date | null;
-    stateName: string;
-    stateData?: never;
-}
 
-export interface GameData {
-    gameState: {
-        isPlayerConnected: boolean
-        board: null
-        difficulty: string
-        gameStartTime: number
-        lastUserInteraction: number
-        stateName: string
-    }
-    sessionState: {
-        currentSessionID: string
-        previousSessionID: string
-    }
-    gameManager: {
-        isPhysicalBoardCleaned: boolean
-    },
-    gameStates: {
-        IDLE: GameState
-        PLAYER_SELECTION: GameState
-        GRAP_BLUE_CHIP: GameState
-        PLACE_BLUE_CHIP: GameState
-        ROBOT_SELECTION: GameState
-        GRAP_RED_CHIP: GameState
-        PLACE_RED_CHIP: GameState
-        ERROR: GameState
-        CLEAN_UP: GameState
-        ROBOT_WIN: GameState
-        PLAYER_WIN: GameState
-        TIE: GameState
-    },
-    rv6l: {
-        connected: boolean
-        messageCounter: number
-    },
-    qrCodeLink: string
-}
+
+
 
 export const GameDataContext = createContext<GameData | null>(null);
+export const WebsocketSendContext = createContext<((message:string)=>void) | null>(null);
 
 export default function WebsocketProvider({
   children,
@@ -92,8 +53,10 @@ export default function WebsocketProvider({
 
   return (
     <GameDataContext value={gameData!}>
+        <WebsocketSendContext value={sendMessage}>
 
       <div className="flex-1 overflow-y-auto">{children}</div>
+        </WebsocketSendContext>
     </GameDataContext>
   );
 }

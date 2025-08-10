@@ -24,13 +24,6 @@ export function initServer() {
 
     initSession();
 
-    setInterval(async () => {
-        if (Date.now() - state.lastUserInteraction > 1000 * 60 * 2 && state.stateName != "IDLE") { // 2 minutes
-            console.log("No user interaction for 2 minutes, resetting game state.");
-            GameManager.resetGame(false);
-        }
-    }, 1000 * 60); // Check every minute
-
 
     app.get('/state', (req, res) => {
         res.json(state)

@@ -12,9 +12,10 @@ import QRCode from "react-qr-code"
 
 import {GameField} from "component-lib";
 import {useContext, useEffect, useRef, useState} from "react";
-import {GameData, GameDataContext} from "@/provider/WebsocketProvider";
+import {GameDataContext} from "@/provider/WebsocketProvider";
 import Link from "next/link";
 import {ExternalLink} from "lucide-react";
+import {GameData} from "@/app/models/GameData";
 export default function Overview() {
     const gameDataContext = useContext(GameDataContext);
     if (!gameDataContext) {

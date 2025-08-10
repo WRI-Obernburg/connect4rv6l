@@ -6,18 +6,20 @@ import {GameDataContext} from "@/provider/WebsocketProvider";
 import {Card, CardContent, CardFooter, CardHeader, CardTitle} from "@/components/ui/card";
 import {GameField} from "component-lib";
 
-interface CustomNodeProps {
+type CustomNodeProps = {
 
-    label: string;
-    active: boolean;
-    expectedDuration: number;
-    startTime: string | null;
-    endTime: string | null;
+    "label": string;
+    "active": boolean;
+    "expectedDuration": number;
+    "startTime": string | null;
+    "endTime": string | null;
 
 }
 
+// @ts-expect-error doesn't work
 const CustomNode: React.FC<CustomNodeProps> = ({data}) => {
     const [timeInState, setTimeInState] = useState(0);
+    const [isSwitchingDialogOpen, setIsSwitchingDialogOpen] = useState(false);
     useEffect(()=>{
         if(data.active) {
             const id = setInterval(() => {
@@ -51,6 +53,10 @@ const CustomNode: React.FC<CustomNodeProps> = ({data}) => {
                 textAlign: 'center',
                 position: 'relative',
                 width: 180,
+            }}
+            onDoubleClick={()=>{
+                //TODO
+
             }}
 
             className={"flex flex-col justify-center"}
@@ -95,23 +101,23 @@ const edges: Edge[] = [
 
 ];
 const initialNodes: Node<CustomNodeProps>[] = [
-    {id: '1', type: 'custom', position: {x: 0, y: 100}, data: {label: 'PLAYER_SELECTION'}},
-    {id: '2', type: 'custom', position: {x: 250, y: 100}, data: {label: 'GRAP_BLUE_CHIP'}},
-    {id: '3', type: 'custom', position: {x: 500, y: 100}, data: {label: 'PLACE_BLUE_CHIP'}},
-    {id: '4', type: 'custom', position: {x: 750, y: 100}, data: {label: 'ROBOT_SELECTION'}},
-    {id: '5', type: 'custom', position: {x: 1000, y: 100}, data: {label: 'GRAP_RED_CHIP'}},
-    {id: '6', type: 'custom', position: {x: 1250, y: 100}, data: {label: 'PLACE_RED_CHIP'}},
-    {id: '7', type: 'custom', position: {x: 500, y: 300}, data: {label: 'PLAYER_WIN'}},
-    {id: '8', type: 'custom', position: {x: 750, y: 300}, data: {label: 'TIE'}},
-    {id: '9', type: 'custom', position: {x: 1250, y: 300}, data: {label: 'ROBOT_WIN'}},
-    {id: '10', type: 'custom', position: {x: 750, y: 500}, data: {label: 'CLEAN_UP'}},
-    {id: '11', type: 'custom', position: {x: 750, y: 700}, data: {label: 'IDLE'}},
-    {id: '12', type: 'custom', position: {x: 1500, y: 100}, data: {label: 'ERROR'}},
+    {id: '1', type: 'custom', position: {x: 0, y: 100}, data: {label: 'PLAYER_SELECTION', active: false, endTime: null, startTime: null, expectedDuration: 0}},
+    {id: '2', type: 'custom', position: {x: 250, y: 100}, data: {label: 'GRAP_BLUE_CHIP', active: false, endTime: null, startTime: null, expectedDuration: 0}},
+    {id: '3', type: 'custom', position: {x: 500, y: 100}, data: {label: 'PLACE_BLUE_CHIP', active: false, endTime: null, startTime: null, expectedDuration: 0}},
+    {id: '4', type: 'custom', position: {x: 750, y: 100}, data: {label: 'ROBOT_SELECTION', active: false, endTime: null, startTime: null, expectedDuration: 0}},
+    {id: '5', type: 'custom', position: {x: 1000, y: 100}, data: {label: 'GRAP_RED_CHIP', active: false, endTime: null, startTime: null, expectedDuration: 0}},
+    {id: '6', type: 'custom', position: {x: 1250, y: 100}, data: {label: 'PLACE_RED_CHIP', active: false, endTime: null, startTime: null, expectedDuration: 0}},
+    {id: '7', type: 'custom', position: {x: 500, y: 300}, data: {label: 'PLAYER_WIN', active: false, endTime: null, startTime: null, expectedDuration: 0}},
+    {id: '8', type: 'custom', position: {x: 750, y: 300}, data: {label: 'TIE', active: false, endTime: null, startTime: null, expectedDuration: 0}},
+    {id: '9', type: 'custom', position: {x: 1250, y: 300}, data: {label: 'ROBOT_WIN', active: false, endTime: null, startTime: null, expectedDuration: 0}},
+    {id: '10', type: 'custom', position: {x: 750, y: 500}, data: {label: 'CLEAN_UP', active: false, endTime: null, startTime: null, expectedDuration: 0}},
+    {id: '11', type: 'custom', position: {x: 750, y: 700}, data: {label: 'IDLE', active: false, endTime: null, startTime: null, expectedDuration: 0}},
+    {id: '12', type: 'custom', position: {x: 1500, y: 100}, data: {label: 'ERROR', active: false, endTime: null, startTime: null, expectedDuration: 0}},
 ];
 
 function StateGraph() {
     const gameDataContext = useContext(GameDataContext);
-    const [renderingNodes, setRenderingNodes] = useState<Node[]>(initialNodes);
+    const [renderingNodes, setRenderingNodes] = useState<Node<CustomNodeProps>[]>(initialNodes);
     const [, forceUpdate] = useReducer(x => x + 1, 0);
 
 
@@ -121,18 +127,18 @@ function StateGraph() {
             setRenderingNodes((nodes) => {
                  return nodes.map((node) => {
 
-                    const stateData = gameDataContext?.gameStates[node.data.label as keyof typeof props.gameData.gameStates];
+                     const stateData = gameDataContext?.gameStates[node.data.label as keyof typeof gameDataContext.gameStates];
 
                     return {
                         ...node,
                         data: {
                             label: stateData?.stateName,
                             active: gameDataContext!.gameState.stateName === node.data.label,
-                            expectedDuration: stateData?.expectedDuration,
-                            startTime: stateData?.startTime,
-                            endTime: stateData?.endTime
+                            expectedDuration: stateData!.expectedDuration!,
+                            startTime: stateData.startTime != null ? stateData.startTime.toString() : null,
+                            endTime: stateData!.endTime != null ? stateData!.endTime.toString() : null,
                         }
-                    }
+                    } satisfies Node<CustomNodeProps>
                 })
             })
         }
@@ -167,6 +173,7 @@ function StateGraph() {
                 }}
                 nodes={renderingNodes}
                 edges={edges}
+                // @ts-expect-error NodeType not working
                 nodeTypes={nodeTypes}
                 contentEditable={false}
                 zoomOnScroll={false}

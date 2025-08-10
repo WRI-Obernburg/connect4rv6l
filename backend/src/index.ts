@@ -1,10 +1,16 @@
-import open, { apps } from "open";
-import { initServer } from "./game_server";
-import { initInternalServer } from "./internal_server";
+import {initServer} from "./game_server";
+import {initInternalServer} from "./internal_server";
 import {initRV6LClient} from "./rv6l_client.ts";
+import {ErrorType, initErrorHandler, throwError} from "./errorHandler/error_handler.ts";
 
 export const FRONTEND_ADRESS = process.env.FRONTEND_ADRESS || "http://localhost:8080";
 
+await initErrorHandler();
+throwError({
+    errorType: ErrorType.INFO,
+    description: "RV6L Connect4 started at " + new Date().toLocaleString(),
+    date: new Date().toString()
+})
 initRV6LClient();
 initServer();
 initInternalServer();

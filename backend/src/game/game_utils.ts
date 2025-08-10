@@ -42,3 +42,11 @@ export async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T
     return await Promise.race([promise, raceTimeout(ms)]) as Promise<T>;
 
 }
+
+export async function waitForTimeout(ms:number) {
+    return new Promise((resolve) => {
+        setTimeout(() => {
+            resolve(true);
+        }, ms);
+    });
+}

@@ -1,6 +1,6 @@
-import {playerSelection, PlayerSelectionAbortError, withTimeout} from "./game_utils.ts";
+import {playerSelection, PlayerSelectionAbortError, waitForTimeout, withTimeout} from "./game_utils.ts";
 import {moveToBlue, moveToColumn, moveToRed} from "../rv6l_client.ts";
-import {type ErrorDescription, ErrorType} from "../errorHandler/error_handler.ts";
+import {type ErrorDescription, ErrorType, throwError} from "../errorHandler/error_handler.ts";
 import {applyGameMove, checkGameState, playAIMove, playMove, resetGame} from "./game.ts";
 import {sendState, state} from "../state.ts";
 import type GameState from "./game_state.ts";
@@ -13,7 +13,7 @@ const PlayerSelect: GameState<void, number> = {
     startTime: null,
     endTime: null,
     action: async () => {
-        const { promise, abort } = playerSelection();
+        const {promise, abort} = playerSelection();
 
         const abortFunction = () => {
             abort();
@@ -26,12 +26,15 @@ const PlayerSelect: GameState<void, number> = {
             const selection = await withTimeout(promise, PlayerSelect.expectedDuration!);
             GameManager.gameEvent.removeListener("stateChange", abortFunction);
 
-            if(playMove(selection)) {
+            if (playMove(selection)) {
                 sendState();
-            }else {
-                //TODO
+            } else {
                 console.error("Player selection failed, resetting game.");
-                GameManager.switchState(Error);
+                GameManager.raiseError({
+                    errorType: ErrorType.FATAL,
+                    description: "Player selection failed, invalid column selected.",
+                    date: new Date().toString()
+                });
                 return {
                     canContinue: false,
                     subsequentState: Error,
@@ -45,17 +48,22 @@ const PlayerSelect: GameState<void, number> = {
                 output: selection,
             }
 
-        }catch (e) {
+        } catch (e) {
             GameManager.gameEvent.removeListener("stateChange", abortFunction);
 
-            if(e instanceof PlayerSelectionAbortError) {
+            if (e instanceof PlayerSelectionAbortError) {
                 return {
                     canContinue: false,
                     subsequentState: null,
                     output: -1
                 }
-            }else{
-                console.error("Player selection timed out or failed, resetting game.");
+            } else {
+                console.error("Player selection timed out, resetting game.");
+                GameManager.raiseError({
+                    errorType: ErrorType.WARNING,
+                    description: "Player selection timed out, resetting game.",
+                    date: new Date().toString()
+                });
                 return {
                     canContinue: true,
                     subsequentState: CleanUp,
@@ -63,7 +71,7 @@ const PlayerSelect: GameState<void, number> = {
                 }
             }
 
-       }
+        }
 
     }
 }
@@ -95,15 +103,15 @@ const PlaceBlueChip: GameState<number, void> = {
         // Check for win or tie conditions here
         const gameStatus = checkGameState();
 
-        if(gameStatus.isGameOver) {
-            if(gameStatus.winner == null) {
+        if (gameStatus.isGameOver) {
+            if (gameStatus.winner == null) {
                 return {
                     canContinue: true,
                     subsequentState: Tie
                 }
             }
 
-            if(gameStatus.winner === 1) {
+            if (gameStatus.winner === 1) {
                 return {
                     canContinue: true,
                     subsequentState: PlayerWin
@@ -140,7 +148,7 @@ const GrapRedChip: GameState<number, number> = {
     startTime: null,
     endTime: null,
     action: async (column: number) => {
-        await withTimeout(moveToRed(), 1000 * 20);
+        await withTimeout(moveToRed(), GrapRedChip.expectedDuration!);
         applyGameMove();
         return {
             canContinue: true,
@@ -156,20 +164,20 @@ const PlaceRedChip: GameState<number, void> = {
     startTime: null,
     endTime: null,
     action: async (column: number) => {
-        await withTimeout(moveToColumn(column), 1000 * 20);
+        await withTimeout(moveToColumn(column), PlaceRedChip.expectedDuration!);
         GameManager.isPhysicalBoardCleaned = false;
         // Check for win or tie conditions here
         const gameStatus = checkGameState();
 
-        if(gameStatus.isGameOver) {
-            if(gameStatus.winner == null) {
+        if (gameStatus.isGameOver) {
+            if (gameStatus.winner == null) {
                 return {
                     canContinue: true,
                     subsequentState: Tie
                 }
             }
 
-            if(gameStatus.winner === 2) {
+            if (gameStatus.winner === 2) {
                 return {
                     canContinue: true,
                     subsequentState: RobotWin
@@ -191,7 +199,8 @@ const Error: GameState<void, void> = {
     endTime: null,
     stateData: {
         errorType: ErrorType.FATAL,
-        description: "Dummy"
+        description: "Dummy",
+        date: new Date().toString()
     } satisfies ErrorDescription,
     action: async () => {
         return {
@@ -209,13 +218,13 @@ const CleanUp: GameState<boolean, void> = {
     endTime: null,
     action: async (instantRestart: boolean) => {
         resetGame();
-        if(!GameManager.isPhysicalBoardCleaned) {
+        if (!GameManager.isPhysicalBoardCleaned) {
             await withTimeout(new Promise<void>((resolve) => {
                 setTimeout(resolve, 1000 * 3);
             }), CleanUp.expectedDuration!);
         }
 
-        if(instantRestart) {
+        if (instantRestart) {
             state.gameStartTime = Date.now();
         }
 
@@ -242,10 +251,16 @@ const Idle: GameState<void, void> = {
 
 const RobotWin: GameState<void, void> = {
     stateName: "ROBOT_WIN",
-    expectedDuration: null,
+    expectedDuration: 1000 * 60 * 2,
     startTime: null,
     endTime: null,
     action: async () => {
+
+        await waitForTimeout(RobotWin.expectedDuration!);
+        if (GameManager.currentGameState === RobotWin) {
+            GameManager.resetGame(false);
+        }
+
         return {
             canContinue: false,
             subsequentState: null
@@ -255,10 +270,16 @@ const RobotWin: GameState<void, void> = {
 
 const PlayerWin: GameState<void, void> = {
     stateName: "PLAYER_WIN",
-    expectedDuration: null,
+    expectedDuration: 1000 * 60 * 2,
     startTime: null,
     endTime: null,
     action: async () => {
+
+        await waitForTimeout(PlayerWin.expectedDuration!);
+        if (GameManager.currentGameState === PlayerWin) {
+            GameManager.resetGame(false);
+        }
+
         return {
             canContinue: false,
             subsequentState: null
@@ -268,10 +289,16 @@ const PlayerWin: GameState<void, void> = {
 
 const Tie: GameState<void, void> = {
     stateName: "TIE",
-    expectedDuration: null,
+    expectedDuration: 1000 * 60 * 2,
     startTime: null,
     endTime: null,
     action: async () => {
+
+        await waitForTimeout(Tie.expectedDuration!);
+        if (GameManager.currentGameState === Tie) {
+            GameManager.resetGame(false);
+        }
+
         return {
             canContinue: false,
             subsequentState: null
@@ -301,20 +328,22 @@ export let GameManager: {
     startNewGame: Function;
     isPhysicalBoardCleaned: boolean;
     resetGame: (instantRestart: boolean) => boolean;
-    _handleStateTransition: (dataPromise: Promise<GameStateOutput<any>>, callingState: GameState<any, any>) => Promise<void>;
+    handleStateTransition: (dataPromise: Promise<GameStateOutput<any>>, callingState: GameState<any, any>) => Promise<void>;
     gameEvent: EventEmitter;
+    raiseError: (error: ErrorDescription) => void;
 };
 GameManager = {
     currentGameState: Idle,
     isPhysicalBoardCleaned: true,
     gameEvent: new EventEmitter(),
 
-    switchState: (newState: GameState<any, any>) => {
+    switchState: (newState: GameState<any, any>, newStateData: any) => {
         console.log(`Switching state from ${GameManager.currentGameState.stateName} to ${newState.stateName}`);
         GameManager.gameEvent.emit("stateChange");
         GameManager.currentGameState.endTime = new Date();
         GameManager.currentGameState = newState;
         newState.startTime = new Date();
+        newState.stateData = newStateData;
         state.stateName = newState.stateName;
         sendState();
 
@@ -325,8 +354,8 @@ GameManager = {
         if (GameManager.currentGameState.stateName === "IDLE") {
             state.gameStartTime = Date.now();
             GameManager.switchState(PlayerSelect)
-            GameManager._handleStateTransition(PlayerSelect.action(), PlayerSelect);
-        }else{
+            GameManager.handleStateTransition(PlayerSelect.action(), PlayerSelect);
+        } else {
             GameManager.resetGame(true);
         }
 
@@ -338,14 +367,25 @@ GameManager = {
             state.gameStartTime = Date.now();
 
             GameManager.switchState(CleanUp);
-            GameManager._handleStateTransition(CleanUp.action(instantRestart), CleanUp);
+            GameManager.handleStateTransition(CleanUp.action(instantRestart), CleanUp);
             return true;
         }
         return false;
     },
 
-    _handleStateTransition: async (dataPromise: Promise<GameStateOutput<any>>, callingState: GameState<any, any>) => {
-        const data = await dataPromise;
+    handleStateTransition: async (dataPromise: Promise<GameStateOutput<any>>, callingState: GameState<any, any>) => {
+        let data: GameStateOutput<any>;
+        try {
+            data = await dataPromise;
+        } catch (e: any) {
+            console.error("Error during state transition:", e);
+            GameManager.raiseError({
+                errorType: ErrorType.FATAL,
+                description: "An error occurred during state " + callingState.stateName + " error: " + e.name,
+                date: new Date().toString()
+            });
+            return;
+        }
 
         if (callingState !== GameManager.currentGameState) { // If the state has changed during the action execution, we ignore the result
             return;
@@ -353,13 +393,17 @@ GameManager = {
 
         if (data.canContinue) {
             if (data.subsequentState != null) {
-                GameManager.switchState(data.subsequentState);
-                if (data.output != null) {
-                    GameManager._handleStateTransition(data.subsequentState.action(data.output), data.subsequentState);
-                } else {
-                    GameManager._handleStateTransition(data.subsequentState.action(null), data.subsequentState);
-                }
+                GameManager.switchState(data.subsequentState, data.output);
+                GameManager.handleStateTransition(data.subsequentState.action(data.output), data.subsequentState);
             }
         }
+    },
+    raiseError: (error: ErrorDescription) => {
+        console.error(`Error raised: ${error.description} (${error.errorType})`);
+        throwError(error).then(() => {
+            if (error.errorType === ErrorType.FATAL) {
+                GameManager.switchState(Error, error);
+            }
+        })
     }
 };

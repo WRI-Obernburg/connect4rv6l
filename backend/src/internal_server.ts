@@ -10,7 +10,15 @@ import cors from 'cors';
 import expressWs from 'express-ws'
 import { v4 as uuidv4 } from 'uuid';
 import { sessionState } from './session';
-import {globalMessageCounter, rv6l_connected} from "./rv6l_client.ts";
+import {
+    globalMessageCounter,
+    moveToBlue, moveToColumn,
+    moveToRed,
+    rv6l_connected,
+    rv6l_moving,
+    toggleGripper
+} from "./rv6l_client.ts";
+import {errors} from "./errorHandler/error_handler.ts";
 
 const app = expressWs(express()).app;
 app.use(cors());
@@ -68,7 +76,49 @@ export function initInternalServer() {
 
         console.log('Internal WebSocket connection established');
 
-        ws.on('message', (message) => {
+        ws.on('message', async (message) => {
+            try {
+                const data = JSON.parse(message.toString());
+                if (data.action === 'resetGame') {
+                    console.log('Resetting game state from control panel');
+                  GameManager.resetGame(false);
+                } else if (data.action === 'sendState') {
+                    sendControlPanelState(ws);
+                } else if (data.action === 'switchToState' && data.stateName != null) {
+                    if (!Object.keys(gameStates).includes(data.stateName)) {
+                        console.warn('Unknown state name received:', data.stateName);
+                        return;
+                    } else {
+                        console.log('Switching to state:', data.stateName);
+                        GameManager.switchState(data.stateName, data.stateData);
+                        GameManager.handleStateTransition(GameManager.currentGameState.action(data.stateData), GameManager.currentGameState);
+                    }
+                } else if(data.action === "control"){
+                    if (data.command === "gripper_on") {
+                       await toggleGripper(true);
+                        sendStateToControlPanelClient!();
+                    }else if (data.command === "gripper_off") {
+                        await toggleGripper(false);
+                        sendStateToControlPanelClient!();
+                    }else if (data.command === "move_to_blue") {
+                        await moveToBlue();
+                        sendStateToControlPanelClient!();
+                    }else if(data.command === "move_to_red") {
+                        await moveToRed()
+                        sendStateToControlPanelClient!();
+                    }else if(data.command === "move_to_column") {
+                        if(data.column != null && typeof data.column === 'number') {
+                            await moveToColumn(data.column);
+                            sendStateToControlPanelClient!();
+                        }
+                    }
+
+                } else {
+                    console.warn('Unknown action received:', data.action);
+                }
+            } catch (error) {
+                console.error('Error processing message:', error);
+            }
 
         });
 
@@ -97,8 +147,10 @@ function sendControlPanelState(ws: WebSocket) {
             rv6l: {
                 connected: rv6l_connected,
                 messageCounter: globalMessageCounter,
+                moving: rv6l_moving,
             },
             qrCodeLink: FRONTEND_ADRESS + "/play?sessionID=" + sessionState.currentSessionID,
+            errors: errors
         }
         ws.send(JSON.stringify(data));
     } else {

@@ -1,5 +1,5 @@
-const ERROR_LOG_FILE = "~/rv6l_error.json"
-let errors: Array<ErrorDescription> = [];
+const ERROR_LOG_FILE = "logs/rv6l_error.json"
+export let errors: Array<ErrorDescription> = [];
 const errorFile = Bun.file(ERROR_LOG_FILE);
 
 export async function initErrorHandler() {
@@ -14,14 +14,15 @@ export async function initErrorHandler() {
 
 export async function throwError(error: ErrorDescription) {
     errors.push(error);
-    console.log(`${error.errorType} | ${error.description}`)
+    console.log(`#${errors.length} | Level ${error.errorType} | ${error.description}`)
     //write to file
     await errorFile.write(JSON.stringify(errors))
 }
 
 export interface ErrorDescription {
     errorType: ErrorType,
-    description: string
+    description: string,
+    date: string
 }
 
 export enum ErrorType {
