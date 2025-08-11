@@ -12,7 +12,6 @@ import {ReactFlow, Handle, Position, Edge, Node} from '@xyflow/react';
 import {useContext, useEffect, useState, useReducer} from "react";
 import {GameDataContext, WebsocketSendContext} from "@/provider/WebsocketProvider";
 import {Card, CardContent, CardFooter, CardHeader, CardTitle} from "@/components/ui/card";
-import {GameField} from "component-lib";
 import {Braces} from "lucide-react";
 import {Button} from "@/components/ui/button";
 
