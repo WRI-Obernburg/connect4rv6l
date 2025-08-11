@@ -9,6 +9,7 @@
   "devDependencies": {
     "@types/bun": "latest",
     "@types/qrcode": "^1.5.5",
+    "@types/ws": "^8.18.1",
     "tsx": "^4.20.3"
   },
   "peerDependencies": {
@@ -24,6 +25,7 @@
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "express-ws": "^5.0.2",
+    "fast-xml-parser": "^5.2.5",
     "i": "^0.3.7",
     "open": "^10.2.0",
     "qrcode": "^1.5.4",

@@ -1,6 +1,6 @@
 import QRCode from "react-qr-code"
 import type { GameState } from "../session"
-import {GameField} from "component-lib";
+import {GameField} from "./GameField";
 
 export default function Game(props: { gameState: GameState, qrCodeLink: string }) {
     return <div className="flex flex-row justify-center gap-16 items-center">

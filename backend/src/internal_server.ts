@@ -41,6 +41,11 @@ export function initInternalServer() {
         }
     });
 
+    //server localfrontend in /localfrontend/dist but only if the request is from localhost
+    app.use('/control', (req, res, next) => {
+        express.static('../controlpanel/dist')(req, res, next);
+    });
+
     app.ws('/ws', (ws, req) => {
         const incomingConnectionID = req.query.connectionID;
         

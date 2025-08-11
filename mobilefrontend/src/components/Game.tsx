@@ -14,7 +14,7 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import DifficultyChooser from "./DifficulityChooser";
-import { GameField } from "component-lib";
+import { GameField } from "./GameField";
 
 export default function Game(props: { sessionID: string }) {
 
@@ -28,7 +28,7 @@ export default function Game(props: { sessionID: string }) {
         lastJsonMessage,
         readyState,
         getWebSocket,
-    } = useWebSocket("http://localhost:3000/play?sessionID=" + props.sessionID, {
+    } = useWebSocket("http://192.168.1.57:3000/play?sessionID=" + props.sessionID, {
         onOpen: () => console.log('opened'),
         onMessage: (message) => {
             console.log('message received', message);

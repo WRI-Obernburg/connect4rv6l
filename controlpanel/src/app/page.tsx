@@ -1,8 +1,7 @@
 "use client";
 import {Card, CardContent, CardFooter, CardHeader, CardTitle,} from "@/components/ui/card"
 import QRCode from "react-qr-code"
-
-import {GameField} from "component-lib";
+import {GameField} from "../components/GameField"
 import {useContext, useEffect, useState} from "react";
 import {GameDataContext} from "@/provider/WebsocketProvider";
 import Link from "next/link";
