@@ -26,7 +26,7 @@ export default function WebsocketProvider({
         lastJsonMessage,
         readyState,
         getWebSocket,
-    } = useWebSocket(`http://${(typeof window !== "undefined")?window.location.hostname:""}:4000/controlpanel`, {
+    } = useWebSocket(`ws://${(typeof window !== "undefined")?window.location.hostname:""}:4000/controlpanel`, {
         onOpen: () => console.log('opened'),
         onClose: () => {
 
