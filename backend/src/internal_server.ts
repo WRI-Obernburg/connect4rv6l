@@ -4,7 +4,7 @@ const port = 4000;
 import express from 'express';
 import WebSocket from 'ws';
 import {resetGame, setBoard} from './game/game.ts';
-import { FRONTEND_ADRESS } from './index';
+import { FRONTEND_ADDRESS } from './index';
 import {sendState, state} from './state';
 import cors from 'cors';
 import expressWs from 'express-ws'
@@ -167,7 +167,7 @@ function sendControlPanelState(ws: WebSocket) {
                 messageCounter: globalMessageCounter,
                 moving: rv6l_moving,
             },
-            qrCodeLink: FRONTEND_ADRESS + "/play?sessionID=" + sessionState.currentSessionID,
+            qrCodeLink: FRONTEND_ADDRESS + "/play?sessionID=" + sessionState.currentSessionID,
             errors: errors,
             isInternalFrontendConnected: isInternalFrontendConnected
         }
@@ -181,7 +181,7 @@ function sendInternalState(ws: WebSocket) {
     if (ws.readyState === ws.OPEN) {
         ws.send(JSON.stringify({
             gameState: state,
-            qrCodeLink: FRONTEND_ADRESS + "/play?sessionID=" + sessionState.currentSessionID,
+            qrCodeLink: FRONTEND_ADDRESS + "/play?sessionID=" + sessionState.currentSessionID,
         }));
     } else {
         console.error('WebSocket is not open. Cannot send state.');

@@ -3,7 +3,7 @@ import {initInternalServer} from "./internal_server";
 import {initRV6LClient} from "./rv6l_client.ts";
 import {ErrorType, initErrorHandler, throwError} from "./errorHandler/error_handler.ts";
 
-export const FRONTEND_ADRESS = process.env.FRONTEND_ADRESS || "http://192.168.1.57:8080";
+export const FRONTEND_ADDRESS = process.env.FRONTEND_ADDRESS || "http://localhost:8080";
 
 await initErrorHandler();
 throwError({

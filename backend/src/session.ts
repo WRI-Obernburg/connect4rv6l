@@ -1,4 +1,4 @@
-import { FRONTEND_ADRESS } from ".";
+import { FRONTEND_ADDRESS } from ".";
 import {sendStateToControlPanelClient, sendStateToInternalClient} from "./internal_server";
 import { state } from "./state";
 import { v4 as uuidv4 } from 'uuid';
@@ -29,6 +29,6 @@ export function initSession() {
 }
 
 function printSessionInfo() {
-        console.log(FRONTEND_ADRESS + "/play?sessionID=" + sessionState.currentSessionID);
+        console.log(FRONTEND_ADDRESS + "/play?sessionID=" + sessionState.currentSessionID);
        // qrcode.generate(FRONTEND_ADRESS + "/play?sessionID=" + sessionState.currentSessionID);
 }

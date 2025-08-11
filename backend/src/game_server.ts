@@ -33,7 +33,7 @@ export function initServer() {
         const sessionID = req.query.sessionID;
         console.log("sessionID", sessionID);
         let isPlayer = false;
-        if (sessionID && (sessionID === previousSessionID || sessionID === sessionState.currentSessionID) || true) { //TODO remove true here
+        if (sessionID && (sessionID === previousSessionID || sessionID === sessionState.currentSessionID)) {
             console.log(`WebSocket connection established with session ID: ${sessionID}`);
 
             state.isPlayerConnected = true;
