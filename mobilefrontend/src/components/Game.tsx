@@ -22,12 +22,7 @@ export default function Game(props: { sessionID: string }) {
     const [gameState, setGameState] = useState<GameState | null>(null)
 
     const {
-        sendMessage,
-        sendJsonMessage,
-        lastMessage,
-        lastJsonMessage,
-        readyState,
-        getWebSocket,
+        sendJsonMessage
     } = useWebSocket("https://rv6l.tim-arnold.de/play?sessionID=" + props.sessionID, {
         onOpen: () => console.log('opened'),
         onMessage: (message) => {
