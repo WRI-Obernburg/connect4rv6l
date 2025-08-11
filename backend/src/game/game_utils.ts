@@ -38,11 +38,6 @@ export class PlayerSelectionAbortError extends Error {
 }
 
 const raceTimeout = (ms: number) => new Promise((_, reject) => setTimeout(()=>{
-    throwError({
-        errorType: ErrorType.WARNING,
-        description: `Operation timed out after ${ms} ms`,
-        date: new Date().toString()
-    })
     reject();
 }, ms));
 
