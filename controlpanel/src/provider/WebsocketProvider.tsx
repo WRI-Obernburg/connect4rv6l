@@ -6,9 +6,6 @@ import useWebSocket from "react-use-websocket";
 import {GameData} from "@/app/models/GameData";
 
 
-
-
-
 export const GameDataContext = createContext<GameData | null>(null);
 export const WebsocketSendContext = createContext<((message:string)=>void) | null>(null);
 

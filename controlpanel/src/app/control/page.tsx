@@ -4,6 +4,8 @@ import {Card, CardContent, CardFooter, CardHeader, CardTitle} from "@/components
 import {Button} from "@/components/ui/button";
 import {useContext} from "react";
 import {GameDataContext, WebsocketSendContext} from "@/provider/WebsocketProvider";
+import {Checkbox} from "@/components/ui/checkbox";
+import {GameData} from "@/app/models/GameData";
 
 export default function ManualControlPage() {
     const gameDataContext = useContext(GameDataContext);
@@ -17,11 +19,13 @@ export default function ManualControlPage() {
             <CardHeader>
                 <CardTitle>Manuelle Steuerung</CardTitle>
                 <p>{gameDataContext!.rv6l.connected ? "RV6L verbunden" : "ACHTUNG: Keine Verbindung zum RV6L!"}</p>
+                <p className={"text-red-500"}>{gameDataContext!.rv6l.mock && "RV6L Verbindung wird gemockt!"}</p>
 
             </CardHeader>
             <CardContent>
                 <div className={"flex flex-col justify-center items-center gap-4"}>
                     <div className={"flex flex-row justify-center items-center gap-4"}>
+                        <SystemWideController gameDataContext={gameDataContext!}></SystemWideController>
                         <GripperController isMoving={gameDataContext!.rv6l.moving}/>
                         <GrapChip isMoving={gameDataContext!.rv6l.moving}/>
                     </div>
@@ -34,6 +38,50 @@ export default function ManualControlPage() {
             </CardFooter>
         </Card>
     );
+}
+
+function SystemWideController(props: {gameDataContext: GameData}) {
+    const websocketSendContext = useContext(WebsocketSendContext);
+
+    return <Card className={"p-4 grow "}>
+        <CardHeader>
+            <CardTitle>System</CardTitle>
+
+
+        </CardHeader>
+        <CardContent className={"flex flex-col justify-center items-center gap-4"}>
+
+            <div className={"flex flex-row justify-center items-center gap-4"}>
+                <Checkbox defaultChecked={props.gameDataContext.rv6l.mock} onCheckedChange={(checked) => {
+                    websocketSendContext!(JSON.stringify({
+                        action: "control",
+                        command: "mock_rv6l",
+                        mock: checked,
+                    }));
+                }} className={"cursor-pointer"} /><p> RV6L Verbindung mocken</p>
+
+            </div>
+
+            <div className={"flex flex-row justify-center items-center gap-4"}>
+                <Button onClick={()=>{
+                    websocketSendContext!(JSON.stringify({
+                        action: "control",
+                        command: "move_to_ref_pos",
+                    }))
+                }} disabled={props.gameDataContext.rv6l.moving} className={"cursor-pointer bg-yellow-500 text-red-50 shadow hover:bg-yellow-600"}>Ref Pos</Button>
+
+                <Button onClick={()=>{
+                    websocketSendContext!(JSON.stringify({
+                        action: "control",
+                        command: "cancel_rv6l",
+                    }))
+                }} className={"cursor-pointer bg-red-500 text-red-50 shadow hover:bg-red-600"}>Cancel Move</Button>
+            </div>
+
+
+        </CardContent>
+
+    </Card>
 }
 
 function GripperController(props: {isMoving: boolean}) {
@@ -92,6 +140,12 @@ function GrapChip(props: {isMoving: boolean}) {
                             command: "move_to_red",
                         }))
                     }} className={"cursor-pointer bg-red-500 text-red-50 shadow hover:bg-red-600"}>Roter Chip</Button>
+                    <Button disabled={props.isMoving} onClick={()=>{
+                        websocketSendContext!(JSON.stringify({
+                            action: "control",
+                            command: "init_chip_palletizing",
+                        }))
+                    }} className={"cursor-pointer bg-green-500 text-blue-50 shadow hover:bg-green-600"}>Reset Palletierung</Button>
                 </div>
 
 

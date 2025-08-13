@@ -11,12 +11,10 @@ import expressWs from 'express-ws'
 import { v4 as uuidv4 } from 'uuid';
 import { sessionState } from './session';
 import {
-    globalMessageCounter,
+    RV6L_STATE,
     moveToBlue, moveToColumn,
     moveToRed,
-    rv6l_connected,
-    rv6l_moving,
-    toggleGripper
+    toggleGripper, interruptRV6LAction, initChipPalletizing, moveToRefPosition
 } from "./rv6l_client.ts";
 import {errors} from "./errorHandler/error_handler.ts";
 
@@ -44,6 +42,14 @@ export function initInternalServer() {
     //server localfrontend in /localfrontend/dist but only if the request is from localhost
     app.use('/control', (req, res, next) => {
         express.static('../controlpanel/dist')(req, res, next);
+    });
+
+    app.use('/controlpanel', (req, res, next) => {
+        if (req.hostname === 'localhost') {
+            express.static('../controlpanel/dist')(req, res, next);
+        } else {
+            res.status(403).send('Forbidden');
+        }
     });
 
     app.ws('/ws', (ws, req) => {
@@ -122,6 +128,22 @@ export function initInternalServer() {
                             await moveToColumn(data.column);
                             sendStateToControlPanelClient!();
                         }
+                    } else if (data.command === "init_chip_palletizing") {
+                        await initChipPalletizing();
+                        sendStateToControlPanelClient!();
+                    } else if (data.command === "move_to_ref_pos") {
+                        await moveToRefPosition();
+                        sendStateToControlPanelClient!();
+                    } else if(data.command === "cancel_rv6l") {
+                        interruptRV6LAction();
+                        sendStateToControlPanelClient!();
+                    } else if (data.command === "mock_rv6l") {
+                        if (data.mock != null && typeof data.mock === 'boolean') {
+                            RV6L_STATE.mock = data.mock;
+                            sendStateToControlPanelClient!();
+                        } else {
+                            console.warn('Invalid mock value received:', data.mock);
+                        }
                     }
                 }else if(data.action === "setBoard") {
                     if (data.board && typeof data.board === 'object') {
@@ -163,9 +185,14 @@ function sendControlPanelState(ws: WebSocket) {
             },
             gameStates: gameStates,
             rv6l: {
-                connected: rv6l_connected,
-                messageCounter: globalMessageCounter,
-                moving: rv6l_moving,
+                connected: RV6L_STATE.rv6l_connected,
+                messageCounter: RV6L_STATE.globalMessageCounter,
+                moving: RV6L_STATE.rv6l_moving,
+                blueChipsLeft: RV6L_STATE.blueChipsLeft,
+                redChipsLeft: RV6L_STATE.redChipsLeft,
+                mock: RV6L_STATE.mock,
+                state: RV6L_STATE.state,
+
             },
             qrCodeLink: FRONTEND_ADDRESS + "/play?sessionID=" + sessionState.currentSessionID,
             errors: errors,

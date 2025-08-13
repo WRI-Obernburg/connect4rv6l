@@ -3,16 +3,52 @@ import {XMLParser} from 'fast-xml-parser';
 import * as stream from 'stream';
 import {sendStateToControlPanelClient} from "./internal_server.ts";
 import {ErrorType, throwError} from "./errorHandler/error_handler.ts";
+import EventEmitter from "events";
 
 var client = new net.Socket();
 const parser = new XMLParser();
 const incommingStream = new stream.PassThrough();
-export let globalMessageCounter = 0;
-export let rv6l_connected = false;
-export let rv6l_moving = false;
-const MOCK_RV6L = true
+
+export let RV6L_STATE = {
+    globalMessageCounter: 0,
+    rv6l_connected: false,
+    rv6l_moving: false,
+    state: "IDLE",
+    blueChipsLeft: 21,
+    redChipsLeft: 21,
+    mock: true,
+    actionStartTime: new Date().toString()
+}
+
+export const abortSignal = new EventEmitter();
+
+function startAction(actionName: string) {
+    RV6L_STATE.actionStartTime = new Date().toString();
+    RV6L_STATE.state = actionName;
+    RV6L_STATE.rv6l_moving = true;
+    sendStateToControlPanelClient?.();
+    console.log(`Starting action: ${actionName}`);
+}
+
+function stopAction(actionName: string) {
+    if( RV6L_STATE.state === actionName) {
+        const duration = new Date().getTime() - new Date(RV6L_STATE.actionStartTime).getTime();
+        console.log(`Action ${actionName} completed in ${duration}ms`);
+        RV6L_STATE.state = "IDLE";
+        RV6L_STATE.rv6l_moving = false;
+        sendStateToControlPanelClient?.();
+    }
+}
+
+export function interruptRV6LAction() {
+    console.log("Interrupting RV6L action");
+    abortSignal.emit('abort'); // Emit the abort signal to cancel any ongoing operations
+    RV6L_STATE.rv6l_moving = false;
+    sendStateToControlPanelClient?.();
+}
+
 export function initRV6LClient() {
-    if(MOCK_RV6L) {
+    if(RV6L_STATE.mock) {
         console.log("WARNING: MOCK_RV6L is enabled, using mock data instead of real RV6L connection.");
         throwError({
             errorType: ErrorType.WARNING,
@@ -24,7 +60,7 @@ export function initRV6LClient() {
 	client.connect(80, '192.168.2.1',async function () {
 
 		console.log('Connected');
-        rv6l_connected = true;
+        RV6L_STATE.rv6l_connected = true;
         sendStateToControlPanelClient?.();
 	
 		// START SESSION	const getVariable = "<RSVCMD><clientStamp>123</clientStamp><symbolApi><readSymbolValue><name>IMOVE</name><prog>S:/PROG/4GEWINNT/4GEWINNT</prog></readSymbolValue></symbolApi></RSVCMD>"
@@ -33,6 +69,7 @@ export function initRV6LClient() {
 		client.write(startSessionCommand);
 	
 		await initSymTable()
+        await initChipPalletizing();
 	
 		/*await moveToBlue();
 		await moveToColumn(1);
@@ -61,48 +98,65 @@ export function initRV6LClient() {
 	
 	client.on('close', function () {
 		console.log('Connection closed');
-        rv6l_connected = false;
+        RV6L_STATE.rv6l_connected = false;
         throwError({
             errorType: ErrorType.FATAL,
             description: "RV6L connection closed unexpectedly. Reconnecting...",
             date: new Date().toString()
         })
         sendStateToControlPanelClient?.();
-        initRV6LClient(); // Reconnect on close
+        setTimeout(initRV6LClient, 5000); // Try to reconnect after 5 seconds
 	});
 }
 
 
 export async function moveToBlue() {
 
-	console.log("Moving to blue");
-    rv6l_moving = true;
-    sendStateToControlPanelClient?.();
-    if(MOCK_RV6L) {
+    startAction("MoveToBlue");
+
+    if(RV6L_STATE.mock) {
         await wait(1000); // Simulate delay for mock
-        rv6l_moving = false;
-        return;
+    }else{
+        try {
+            await writeVariableInProc("IMOVE", "1");
+            await movementDone();
+        }catch (error) {
+            console.error("Couldn't complete blue chip graping", error);
+            throwError({
+                errorType: ErrorType.WARNING,
+                description: "Couldn't complete blue chip graping",
+                date: new Date().toString()
+            });
+        }
     }
 
-	await writeVariableInProc("IMOVE", "1");
-	await movementDone();
-    rv6l_moving = false;
+    RV6L_STATE.blueChipsLeft--;
+
+    stopAction("MoveToBlue");
 }
 
 export async function moveToRed() {
 
-	console.log("Moving to red");
-    rv6l_moving = true;
-    sendStateToControlPanelClient?.();
-    if(MOCK_RV6L) {
+	startAction("MoveToRed");
+    if(RV6L_STATE.mock) {
         await wait(1000); // Simulate delay for mock
-        rv6l_moving = false;
-        return;
+    }else{
+        try {
+            await writeVariableInProc("IMOVE", "2");
+            await movementDone();
+        }catch (error) {
+            console.error("Couldn't complete red chip graping", error);
+            throwError({
+                errorType: ErrorType.WARNING,
+                description: "Couldn't complete red chip graping",
+                date: new Date().toString()
+            });
+        }
     }
 
-	await writeVariableInProc("IMOVE", "2");
-	await movementDone();
-    rv6l_moving = false;
+    RV6L_STATE.redChipsLeft--;
+
+    stopAction("MoveToRed");
 }
 
 export async function moveToColumn(column:number) {
@@ -115,19 +169,72 @@ export async function moveToColumn(column:number) {
 		throw new Error("Column must be between 0 and 6");
 	}
 
-	console.log("Moving to column " + column);
-    rv6l_moving = true;
-    sendStateToControlPanelClient?.();
 
-    if(MOCK_RV6L) {
+    startAction("MoveToColumn"+column);
+
+    if(RV6L_STATE.mock) {
         await wait(1000); // Simulate delay for mock
-        rv6l_moving = false;
-        return;
+    }else{
+        try {
+            await writeVariableInProc("IMOVE", (11+column).toString());
+            await movementDone();
+        }catch (error) {
+            console.error("Couldn't complete move to column " + column, error);
+            throwError({
+                errorType: ErrorType.WARNING,
+                description: "Couldn't complete move to column " + column,
+                date: new Date().toString()
+            });
+        }
     }
 
-	await writeVariableInProc("IMOVE", (11+column).toString());
-	await movementDone();
-    rv6l_moving = false;
+    stopAction("MoveToColumn"+column);
+}
+
+export async function initChipPalletizing(){
+
+    startAction("InitChipPalletizing");
+
+    if(RV6L_STATE.mock) {
+        await wait(1000); // Simulate delay for mock
+    }else{
+        try {
+            await writeVariableInProc("IMOVE", "3");
+            await movementDone()
+        }catch (error) {
+            console.error("Couldn't complete chip palletizing initialization", error);
+            throwError({
+                errorType: ErrorType.WARNING,
+                description: "Couldn't complete chip palletizing initialization",
+                date: new Date().toString()
+            });
+        }
+    }
+
+    RV6L_STATE.blueChipsLeft = 21;
+    RV6L_STATE.redChipsLeft = 21;
+    stopAction("InitChipPalletizing");
+}
+
+export async function moveToRefPosition() {
+    startAction("MoveToRefPosition");
+    if(RV6L_STATE.mock) {
+        await wait(1000); // Simulate delay for mock
+    }else{
+        try {
+            await writeVariableInProc("IMOVE", "4");
+            await movementDone();
+        }catch (error) {
+            console.error("Couldn't complete move to reference position", error);
+            throwError({
+                errorType: ErrorType.WARNING,
+                description: "Couldn't complete move to reference position",
+                date: new Date().toString()
+            });
+        }
+    }
+
+    stopAction("MoveToRefPosition");
 }
 
 async function movementDone() {
@@ -145,10 +252,17 @@ async function waitForVariablePolling(variable:string, value:string) {
 				resolve(true);
 				let deltaTime = Date.now() - startTime;
 				process.stdout.write(` done Took ${deltaTime}ms\n`);
+                abortSignal.removeListener('abort', cancel); // Remove the abort listener
 			}else{
 				process.stdout.write(".")
 			}
 		}, 200);
+        const cancel = () => {
+            clearInterval(id);
+            abortSignal.removeListener('abort', cancel); // Remove the abort listener
+            reject(new Error(`Canceled waiting for variable ${variable} to be ${value}`));
+        }
+        abortSignal.once('abort', cancel); // Listen for abort signal
 	});
 }
 
@@ -159,7 +273,7 @@ async function readVariableInProc(name: string): Promise<string> {
 
 	const result = await waitForMessage(messageId);
 
-	return result.RSVRES.symbolApi.readSymbolValue.value;
+	return result.promise.RSVRES.symbolApi.readSymbolValue.value;
 }
 
 async function initSymTable() {
@@ -184,7 +298,7 @@ async function writeVariableInProc(name: string, value: string) {
 export async function toggleGripper(on: boolean) {
     console.log("Toggling gripper to " + (on ? "ON" : "OFF"));
 
-    if(MOCK_RV6L) {
+    if(RV6L_STATE.mock) {
         await wait(1000); // Simulate delay for mock
         return;
     }
@@ -196,7 +310,9 @@ export async function toggleGripper(on: boolean) {
 
 }
 
-async function waitForMessage(id: number):Promise<any> {
+async function waitForMessage(id: number): Promise<any> {
+
+
 	return new Promise((resolve, reject) => {
 		const onDataCallback = (data: any) => {
 			const jsonObj = JSON.parse(data.toString());
@@ -205,16 +321,24 @@ async function waitForMessage(id: number):Promise<any> {
 			}
 			resolve(jsonObj);
 			incommingStream.off('data', onDataCallback); // Remove the listener after resolving
+            abortSignal.removeListener('abort', cancel); // Remove the abort listener
 		};
 		incommingStream.on('data', onDataCallback);
+        const cancel = ()=> {
+            incommingStream.off('data', onDataCallback); // Remove the listener if cancelled
+            abortSignal.removeListener('abort', cancel); // Remove the abort listener
+            reject(new Error(`Canceled waiting for message with id ${id}`));
+        }
+        abortSignal.once('abort', cancel); // Listen for abort signal
+
 	});
 }
 
 function getNextMessageId(): number {
-	if(globalMessageCounter >= 1000) {
-		globalMessageCounter = 0;
+	if(RV6L_STATE.globalMessageCounter >= 1000) {
+        RV6L_STATE.globalMessageCounter = 0;
 	}
-	return globalMessageCounter++;
+	return RV6L_STATE.globalMessageCounter++;
 }
 
 async function wait(ms:number) {

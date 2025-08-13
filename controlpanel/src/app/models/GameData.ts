@@ -49,7 +49,11 @@ export interface GameData {
     rv6l: {
         connected: boolean
         messageCounter: number
-        moving: boolean
+        moving: boolean,
+        blueChipsLeft: number,
+        redChipsLeft: number,
+        mock: boolean,
+        state: string
     },
     qrCodeLink: string,
     errors: ErrorDescription[],
