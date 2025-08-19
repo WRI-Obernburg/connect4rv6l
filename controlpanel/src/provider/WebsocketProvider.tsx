@@ -4,6 +4,7 @@
 import {createContext, useState} from "react";
 import useWebSocket from "react-use-websocket";
 import {GameData} from "@/app/models/GameData";
+import { toast } from "sonner";
 
 
 export const GameDataContext = createContext<GameData | null>(null);
@@ -34,7 +35,19 @@ export default function WebsocketProvider({
         onMessage: (event) => {
             try {
                 const data = JSON.parse(event.data);
-                setGameData(data);
+                if(data.type==="data") {
+                  setGameData(data.data as GameData);
+                }else if(data.type === "error") {
+                  console.log("Error received from server:", data.error);
+                  toast.error(`Fehler: ${data.error.description}`, {
+                    description: `Fehlerart: ${data.error.errorType} | Datum: ${data.error.date}`,
+                    duration: 7000,
+                    style: {
+                      backgroundColor: '#f87171', // Tailwind red-400
+                      color: '#fff',
+                    },
+                  });
+                }
 
                 console.log('Received message:', data);
             } catch (error) {

@@ -16,17 +16,34 @@ import {
     moveToRed,
     toggleGripper, interruptRV6LAction, initChipPalletizing, moveToRefPosition
 } from "./rv6l_client.ts";
-import {errors} from "./errorHandler/error_handler.ts";
+import {errors, type ErrorDescription} from "./errorHandler/error_handler.ts";
 
 const app = expressWs(express()).app;
 app.use(cors());
 
 export const connectionID = uuidv4();
 
-export let sendStateToInternalClient: (() => void) | null = null;
-export let sendStateToControlPanelClient: (() => void) | null = null;
+
 
 let isInternalFrontendConnected = false;
+let controlPanelConnections:Array<WebSocket> = [];
+let internalConnections:Array<WebSocket> = []; //connections to the internal frontend
+
+export let sendStateToInternalClient: (() => void) = () => {
+    internalConnections.forEach((connection) => {
+        sendInternalState(connection);
+    });
+};
+export let sendStateToControlPanelClient: (() => void) = () => {
+    controlPanelConnections.forEach((connection) => {
+        sendControlPanelState(connection);
+    });
+};
+export let sendErrorToControlPanelClient: ((error: ErrorDescription) => void) = (error => {
+    controlPanelConnections.forEach((connection) => {
+        sendNewErrorToControlPanel(connection, error);
+    });
+});
 
 export function initInternalServer() {
 
@@ -54,11 +71,9 @@ export function initInternalServer() {
 
     app.ws('/ws', (ws, req) => {
         const incomingConnectionID = req.query.connectionID;
-        
 
-        sendStateToInternalClient = () => {
-            sendInternalState(ws);
-        }
+        internalConnections.push(ws);
+        
         sendInternalState(ws);
 
         isInternalFrontendConnected = true;
@@ -73,20 +88,23 @@ export function initInternalServer() {
 
         ws.on('close', () => {
             console.log('WebSocket connection closed');
-            sendStateToInternalClient = null;
-            isInternalFrontendConnected = false;
+            internalConnections = internalConnections.filter(connection => connection !== ws);
+            isInternalFrontendConnected = internalConnections.length > 0;
             sendStateToControlPanelClient?.();
         });
 
     });
 
+    
+
+
     app.ws('/controlpanel', (ws, req) => {
         const incomingConnectionID = req.query.connectionID;
 
+        controlPanelConnections.push(ws);
 
-        sendStateToControlPanelClient = () => {
-            sendControlPanelState(ws);
-        }
+
+        
         sendControlPanelState(ws);
 
 
@@ -164,7 +182,7 @@ export function initInternalServer() {
 
         ws.on('close', () => {
             console.log('WebSocket connection closed');
-            sendStateToControlPanelClient = null;
+            controlPanelConnections = controlPanelConnections.filter(connection => connection !== ws);
         });
 
     });
@@ -198,9 +216,21 @@ function sendControlPanelState(ws: WebSocket) {
             errors: errors,
             isInternalFrontendConnected: isInternalFrontendConnected
         }
-        ws.send(JSON.stringify(data));
+        ws.send(JSON.stringify({
+            "type": "data",
+            "data": data
+        }));
     } else {
         console.error('WebSocket is not open. Cannot send state.');
+    }
+}
+
+function sendNewErrorToControlPanel(ws: WebSocket, error: ErrorDescription) {
+    if (ws.readyState === ws.OPEN) {
+        ws.send(JSON.stringify({
+            "type": "error",
+            "error": error
+        }));
     }
 }
 

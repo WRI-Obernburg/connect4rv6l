@@ -266,7 +266,7 @@ async function waitForVariablePolling(variable:string, value:string) {
         }
 		const timeoutID = setTimeout(() => {
 			cancel();
-		}, 5000); // 30 seconds timeout
+		}, 30000); // 30 seconds timeout
         abortSignal.once('abort', cancel); // Listen for abort signal
 	});
 }

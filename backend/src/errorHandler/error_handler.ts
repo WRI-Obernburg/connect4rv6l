@@ -1,4 +1,5 @@
 import { GameManager, gameStates } from "../game/game_manager";
+import { sendErrorToControlPanelClient } from "../internal_server";
 export interface ErrorDescription {
     errorType: ErrorType,
     description: string,
@@ -31,5 +32,8 @@ export async function throwError(error: ErrorDescription) {
     if(error.errorType === ErrorType.FATAL) {
         GameManager.switchState(gameStates.ERROR, error);
     }
+
+
+    sendErrorToControlPanelClient(error);
 }
 
