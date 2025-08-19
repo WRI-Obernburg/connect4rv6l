@@ -1,3 +1,13 @@
+import { GameManager, gameStates } from "../game/game_manager";
+export interface ErrorDescription {
+    errorType: ErrorType,
+    description: string,
+    date: string
+}
+
+export enum ErrorType {
+    FATAL, WARNING, INFO
+}
 const ERROR_LOG_FILE = "logs/rv6l_error.json"
 export let errors: Array<ErrorDescription> = [];
 const errorFile = Bun.file(ERROR_LOG_FILE);
@@ -17,14 +27,9 @@ export async function throwError(error: ErrorDescription) {
     console.log(`#${errors.length} | Level ${error.errorType} | ${error.description}`)
     //write to file
     await errorFile.write(JSON.stringify(errors))
+
+    if(error.errorType === ErrorType.FATAL) {
+        GameManager.switchState(gameStates.ERROR, error);
+    }
 }
 
-export interface ErrorDescription {
-    errorType: ErrorType,
-    description: string,
-    date: string
-}
-
-export enum ErrorType {
-    FATAL, WARNING, INFO
-}

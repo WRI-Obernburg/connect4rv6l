@@ -399,11 +399,7 @@ GameManager = {
         }
     },
     raiseError: (error: ErrorDescription) => {
-        console.error(`Error raised: ${error.description} (${error.errorType})`);
-        throwError(error).then(() => {
-            if (error.errorType === ErrorType.FATAL) {
-                GameManager.switchState(Error, error);
-            }
-        })
+        console.error(`Error raised in game: ${error.description} (${error.errorType})`);
+        throwError(error);
     }
 };

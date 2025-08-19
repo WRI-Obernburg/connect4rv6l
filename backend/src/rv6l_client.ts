@@ -16,7 +16,7 @@ export let RV6L_STATE = {
     state: "IDLE",
     blueChipsLeft: 21,
     redChipsLeft: 21,
-    mock: true,
+    mock: false,
     actionStartTime: new Date().toString()
 }
 
@@ -100,7 +100,7 @@ export function initRV6LClient() {
 		console.log('Connection closed');
         RV6L_STATE.rv6l_connected = false;
         throwError({
-            errorType: ErrorType.FATAL,
+            errorType: ErrorType.WARNING,
             description: "RV6L connection closed unexpectedly. Reconnecting...",
             date: new Date().toString()
         })
@@ -123,7 +123,7 @@ export async function moveToBlue() {
         }catch (error) {
             console.error("Couldn't complete blue chip graping", error);
             throwError({
-                errorType: ErrorType.WARNING,
+                errorType: ErrorType.FATAL,
                 description: "Couldn't complete blue chip graping",
                 date: new Date().toString()
             });
@@ -147,7 +147,7 @@ export async function moveToRed() {
         }catch (error) {
             console.error("Couldn't complete red chip graping", error);
             throwError({
-                errorType: ErrorType.WARNING,
+                errorType: ErrorType.FATAL,
                 description: "Couldn't complete red chip graping",
                 date: new Date().toString()
             });
@@ -181,7 +181,7 @@ export async function moveToColumn(column:number) {
         }catch (error) {
             console.error("Couldn't complete move to column " + column, error);
             throwError({
-                errorType: ErrorType.WARNING,
+                errorType: ErrorType.FATAL,
                 description: "Couldn't complete move to column " + column,
                 date: new Date().toString()
             });
@@ -204,7 +204,7 @@ export async function initChipPalletizing(){
         }catch (error) {
             console.error("Couldn't complete chip palletizing initialization", error);
             throwError({
-                errorType: ErrorType.WARNING,
+                errorType: ErrorType.FATAL,
                 description: "Couldn't complete chip palletizing initialization",
                 date: new Date().toString()
             });
@@ -227,7 +227,7 @@ export async function moveToRefPosition() {
         }catch (error) {
             console.error("Couldn't complete move to reference position", error);
             throwError({
-                errorType: ErrorType.WARNING,
+                errorType: ErrorType.FATAL,
                 description: "Couldn't complete move to reference position",
                 date: new Date().toString()
             });
@@ -260,8 +260,13 @@ async function waitForVariablePolling(variable:string, value:string) {
         const cancel = () => {
             clearInterval(id);
             abortSignal.removeListener('abort', cancel); // Remove the abort listener
-            reject(new Error(`Canceled waiting for variable ${variable} to be ${value}`));
+			clearTimeout(timeoutID); // Clear the timeout if cancelled
+			reject(new Error(`Canceled waiting for variable ${variable} to be ${value}`));
+	
         }
+		const timeoutID = setTimeout(() => {
+			cancel();
+		}, 5000); // 30 seconds timeout
         abortSignal.once('abort', cancel); // Listen for abort signal
 	});
 }
@@ -273,10 +278,11 @@ async function readVariableInProc(name: string): Promise<string> {
 
 	const result = await waitForMessage(messageId);
 
-	return result.promise.RSVRES.symbolApi.readSymbolValue.value;
+	return result.RSVRES.symbolApi.readSymbolValue.value;
 }
 
 async function initSymTable() {
+	console.log("Initializing symbol table...");
 	let messageId = getNextMessageId();
 	const initSymbolsCommand = `<RSVCMD><clientStamp>${messageId}</clientStamp><symbolApi><initSymbolTable/></symbolApi></RSVCMD>`;
 	client.write(initSymbolsCommand);
@@ -323,12 +329,18 @@ async function waitForMessage(id: number): Promise<any> {
 			incommingStream.off('data', onDataCallback); // Remove the listener after resolving
             abortSignal.removeListener('abort', cancel); // Remove the abort listener
 		};
-		incommingStream.on('data', onDataCallback);
-        const cancel = ()=> {
+		const cancel = ()=> {
             incommingStream.off('data', onDataCallback); // Remove the listener if cancelled
             abortSignal.removeListener('abort', cancel); // Remove the abort listener
             reject(new Error(`Canceled waiting for message with id ${id}`));
-        }
+			clearTimeout(timeoutID); // Clear the timeout if cancelled
+		}
+		incommingStream.on('data', onDataCallback);
+        
+		const timeoutID = setTimeout(() => {
+			cancel();
+			reject(new Error(`Timeout waiting for message with id ${id}`));
+		}, 5000); // 30 seconds timeout
         abortSignal.once('abort', cancel); // Listen for abort signal
 
 	});
