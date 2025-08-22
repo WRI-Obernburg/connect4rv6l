@@ -268,6 +268,21 @@ const RobotWin: GameState<void, void> = {
     }
 }
 
+const Sleep: GameState<void, void> = {
+    stateName: "SLEEP",
+    expectedDuration: null,
+    startTime: null,
+    endTime: null,
+   
+    action: async () => {
+        return {
+            canContinue: false,
+            subsequentState: null
+        }
+    }
+
+}
+
 const PlayerWin: GameState<void, void> = {
     stateName: "PLAYER_WIN",
     expectedDuration: 1000 * 60 * 2,
@@ -320,6 +335,7 @@ export const gameStates = {
     ROBOT_WIN: RobotWin,
     PLAYER_WIN: PlayerWin,
     TIE: Tie,
+    SLEEP: Sleep
 }
 
 export let GameManager: {

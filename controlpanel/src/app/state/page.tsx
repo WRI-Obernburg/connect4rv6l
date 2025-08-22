@@ -152,6 +152,8 @@ const initialNodes: Node<CustomNodeProps>[] = [
     {id: '10', type: 'custom', position: {x: 750, y: 500}, data: {label: 'CLEAN_UP', active: false, endTime: null, startTime: null, expectedDuration: 0, stateData: null}},
     {id: '11', type: 'custom', position: {x: 750, y: 700}, data: {label: 'IDLE', active: false, endTime: null, startTime: null, expectedDuration: 0, stateData: null}},
     {id: '12', type: 'custom', position: {x: 1500, y: 100}, data: {label: 'ERROR', active: false, endTime: null, startTime: null, expectedDuration: 0, stateData: null}},
+    {id: '13', type: 'custom', position: {x: 1500, y: 300}, data: {label: 'SLEEP', active: false, endTime: null, startTime: null, expectedDuration: 0, stateData: null}},
+
 ];
 
 function StateGraph() {

@@ -9,7 +9,7 @@ export default function QRCodeComponent(props: { qrCodeLink: string | null, isGa
             }
             <div>
                 <p className="text-gray-600 text-7xl font-bold">RV6L-Gewinnt</p>
-                <p className="text-xl text-gray-500 mt-2">
+                <p className="max-w-[40vw] text-3xl text-gray-500 mt-2">
                     Scanne den QR-Code mit dem Handy um ein Spiel gegen den Roboter zu spielen.
                 </p>
                 {

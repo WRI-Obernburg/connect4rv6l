@@ -24,7 +24,7 @@ export default function Game(props: { sessionID: string, indoor: boolean }) {
     const {
         sendJsonMessage,
         readyState
-    } = useWebSocket("https://rv6l.tim-arnold.de/play?sessionID=" + props.sessionID, {
+    } = useWebSocket("http://localhost:3000/play?sessionID=" + props.sessionID, {
         onOpen: () => console.log('opened'),
         onMessage: (message) => {
             console.log('message received', message);
@@ -87,6 +87,12 @@ export default function Game(props: { sessionID: string, indoor: boolean }) {
         return <div className="flex flex-col gap-4 justify-center mt-4">
             <div className="text-center text-2xl font-bold text-red-500">Das System ist zur Zeit außer Betrieb</div>
         </div>
+    }
+
+    if(gameState.stateName === "SLEEP") {
+        return <div className="flex flex-col gap-4 justify-center mt-4">
+        <div className="text-center text-xl font-bold text-slate-700">Der Roboter schläft schon. Aber morgen ist er wieder für eine Herausforderung bereit!</div>
+    </div>
     }
 
     if (gameState.stateName === "IDLE") {
