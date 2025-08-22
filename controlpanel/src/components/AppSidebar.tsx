@@ -1,9 +1,10 @@
 "use client";
-import {Calendar, Home, Inbox, MonitorCog, Orbit, Search, Settings, ShieldAlert, SquareChartGantt, Gamepad} from "lucide-react"
+import {Calendar, Home, Inbox, MonitorCog, Orbit, Search, Settings, ShieldAlert, SquareChartGantt, Gamepad, Package, Info} from "lucide-react"
 
 import {
     Sidebar,
     SidebarContent,
+    SidebarFooter,
     SidebarGroup,
     SidebarGroupContent,
     SidebarGroupLabel,
@@ -13,6 +14,9 @@ import {
 } from "@/components/ui/sidebar"
 import {usePathname} from "next/navigation";
 import SideBarButton from "@/components/SideBarButton";
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
+import { DialogDescription, DialogTrigger } from "@radix-ui/react-dialog";
+import { Button } from "./ui/button";
 
 // Menu items.
 const items = [
@@ -41,6 +45,11 @@ const items = [
         url: "/game",
         icon: Gamepad,
     },
+    {
+        title: "Architecture",
+        url: "/architecture",
+        icon: Package
+    }
 ]
 
 export function AppSidebar() {
@@ -58,6 +67,35 @@ export function AppSidebar() {
                     </SidebarGroupContent>
                 </SidebarGroup>
             </SidebarContent>
+            <SidebarFooter>
+                <Dialog>
+                    <DialogTrigger asChild>
+                        <SidebarMenuButton className="cursor-pointer">
+                            <Info className="h-4 w-4" />
+                            About
+                        </SidebarMenuButton>
+                    </DialogTrigger>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Über 4-Gewinnt</DialogTitle>
+                            <DialogDescription>
+                                Dieses Projekt dient als Demoanwendung für den RV6L im Walter Reis Insitut.
+                                <br />
+                                Dabei tritt ein Spieler gegen einen künstliche Intelligenz an, die auf dem Backend implementiert ist.
+                                <br />
+                                <br />
+                                © 2025 Tim Arnold
+                            </DialogDescription>
+                        </DialogHeader>
+                        {/* Settings content goes here */}
+                        <DialogFooter>
+                            <DialogClose asChild>
+                                <Button className="cursor-pointer">Schließen</Button>
+                            </DialogClose>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            </SidebarFooter>
         </Sidebar>
     )
 }

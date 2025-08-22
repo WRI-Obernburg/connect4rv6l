@@ -5,10 +5,12 @@ import QRCodeComponent from './QRCode'
 import useWebSocket from 'react-use-websocket';
 import type { GameState } from './session';
 import Game from './components/Game';
+import { useQueryParam } from './lib/utils';
 
 function App() {
   const [qrCodeLink, setQrCodeLink] = useState<string | null>(null);
   const [state, setState] = useState<GameState | null>(null);
+  const indoor = useQueryParam('indoor') != null;
   
 
   const {
@@ -18,7 +20,7 @@ function App() {
     lastJsonMessage,
     readyState,
     getWebSocket,
-  } = useWebSocket("http://localhost:4000/ws", {
+  } = useWebSocket("http://wriros.local:4000/ws", {
     onOpen: () => console.log('opened'),
     onClose: () => {
       setQrCodeLink(null);
@@ -59,12 +61,12 @@ function App() {
   }
 
   if(!state.isPlayerConnected || (state.stateName === "IDLE") ) {
-    return <QRCodeComponent qrCodeLink={qrCodeLink} isGameRunning={state.stateName !== "IDLE"}/>
+    return <QRCodeComponent qrCodeLink={qrCodeLink+(indoor?"&indoor":"")} isGameRunning={state.stateName !== "IDLE"}/>
   }
 
   return (
     <>
-      <Game gameState={state} qrCodeLink={qrCodeLink!}></Game>
+      <Game gameState={state} qrCodeLink={qrCodeLink!+(indoor?"&indoor":"")}></Game>
     </>
   )
 }

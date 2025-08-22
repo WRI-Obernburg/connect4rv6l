@@ -22,7 +22,8 @@ export default function Game(props: { sessionID: string }) {
     const [gameState, setGameState] = useState<GameState | null>(null)
 
     const {
-        sendJsonMessage
+        sendJsonMessage,
+        readyState
     } = useWebSocket("https://rv6l.tim-arnold.de/play?sessionID=" + props.sessionID, {
         onOpen: () => console.log('opened'),
         onMessage: (message) => {
@@ -67,6 +68,12 @@ export default function Game(props: { sessionID: string }) {
             <div className="text-red-500 text-center font-bold">
                 Spiel ID ist abgelaufen
             </div>
+        </div>
+    }
+
+    if(readyState !== 1) {
+        return <div className="flex flex-col gap-4 justify-center mt-4">
+            <div className="text-center">Verbinde zum Server...</div>
         </div>
     }
 

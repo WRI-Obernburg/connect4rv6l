@@ -49,11 +49,7 @@ export function initInternalServer() {
 
     //server localfrontend in /localfrontend/dist but only if the request is from localhost
     app.use('/localfrontend', (req, res, next) => {
-        if (req.hostname === 'localhost') {
-            express.static('../localfrontend/dist')(req, res, next);
-        } else {
-            res.status(403).send('Forbidden');
-        }
+        express.static('../localfrontend/dist')(req, res, next);
     });
 
     //server localfrontend in /localfrontend/dist but only if the request is from localhost
@@ -61,14 +57,7 @@ export function initInternalServer() {
         express.static('../controlpanel/dist')(req, res, next);
     });
 
-    app.use('/controlpanel', (req, res, next) => {
-        if (req.hostname === 'localhost') {
-            express.static('../controlpanel/dist')(req, res, next);
-        } else {
-            res.status(403).send('Forbidden');
-        }
-    });
-
+   
     app.ws('/ws', (ws, req) => {
         const incomingConnectionID = req.query.connectionID;
 
