@@ -15,7 +15,6 @@ initRV6LClient();
 initServer();
 initInternalServer();
 
-//await open('https://sindresorhus.com', {app: {name: apps.chrome, arguments: [`--app=http://localhost:4000/localfrontend`, "--start-fullscreen"]}});
 
 
 console.log("Hello via Bun!");

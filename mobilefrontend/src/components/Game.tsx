@@ -16,7 +16,7 @@ import {
 import DifficultyChooser from "./DifficulityChooser";
 import { GameField } from "./GameField";
 
-export default function Game(props: { sessionID: string }) {
+export default function Game(props: { sessionID: string, indoor: boolean }) {
 
     const [isSessionIDValid, setIsSessionIDValid] = useState(true);
     const [gameState, setGameState] = useState<GameState | null>(null)
@@ -47,7 +47,7 @@ export default function Game(props: { sessionID: string }) {
         if (gameState && gameState.stateName == "PLAYER_SELECTION") {
             sendJsonMessage({
                 type: "placeChip",
-                slot: columnIndex,
+                slot: props.indoor?columnIndex: 6- columnIndex // Adjust for outdoor play,
             });
         }
     }

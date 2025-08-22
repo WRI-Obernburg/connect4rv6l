@@ -6,13 +6,14 @@ import { useSearchParams } from "next/navigation";
 export default function Home() {
       const searchParams = useSearchParams()
     const sessionID = searchParams.get("sessionID");
+    const indoor = searchParams.get("indoor") != null;
 
 
     return <div className="flex flex-col justify-center mt-4">
         <h1 className="text-3xl font-bold text-center mb-4">RV6L-Gewinnt</h1>
         <p className="text-center text-lg">Beweise dich jetzt in einem Spiel gegen den Viergewinnt-Roboter</p>
 
-        {sessionID ? <Game sessionID={sessionID} /> : <div className="text-red-500 text-center font-bold">Spiel ID fehlt</div>}
+        {sessionID ? <Game indoor={indoor} sessionID={sessionID} /> : <div className="text-red-500 text-center font-bold">Spiel ID fehlt</div>}
         
     </div>
 };
