@@ -263,10 +263,11 @@ async function waitForVariablePolling(variable: string, value: string) {
             try {
                 const currentValue = await readVariableInProc(variable);
                 if (currentValue.toString() === value) {
-                    resolve(true);
                     let deltaTime = Date.now() - startTime;
                     process.stdout.write(` done Took ${deltaTime}ms\n`);
+                    clearTimeout(timeoutID);
                     abortSignal.removeListener('abort', cancel); // Remove the abort listener
+                    resolve(true);
                     return;
                 } else {
                     if (!abort) {
