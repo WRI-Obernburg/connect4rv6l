@@ -1,22 +1,26 @@
 import {GameManager, gameStates} from "./game/game_manager.ts";
-
-const port = 4000;
 import express from 'express';
 import WebSocket from 'ws';
 import {resetGame, setBoard} from './game/game.ts';
-import { FRONTEND_ADDRESS } from './index';
+import {FRONTEND_ADDRESS} from './index';
 import {sendState, state} from './state';
 import cors from 'cors';
 import expressWs from 'express-ws'
-import { v4 as uuidv4 } from 'uuid';
-import { sessionState } from './session';
+import {v4 as uuidv4} from 'uuid';
+import {sessionState} from './session';
 import {
-    RV6L_STATE,
-    moveToBlue, moveToColumn,
+    initChipPalletizing,
+    interruptRV6LAction,
+    moveToBlue,
+    moveToColumn,
     moveToRed,
-    toggleGripper, interruptRV6LAction, initChipPalletizing, moveToRefPosition
+    moveToRefPosition,
+    RV6L_STATE,
+    toggleGripper
 } from "./rv6l_client.ts";
-import {errors, type ErrorDescription} from "./errorHandler/error_handler.ts";
+import {type ErrorDescription, errors, ErrorType, logEvent} from "./errorHandler/error_handler.ts";
+
+const port = 4000;
 
 const app = expressWs(express()).app;
 app.use(cors());
@@ -69,14 +73,17 @@ export function initInternalServer() {
         sendStateToControlPanelClient?.();
 
 
-        console.log('Internal WebSocket connection established');
+        logEvent({
+            description: `Internal WebSocket connection established`,
+            errorType: ErrorType.INFO,
+            date: new Date().toString()
+        })
 
         ws.on('message', (message) => {
             
         });
 
         ws.on('close', () => {
-            console.log('WebSocket connection closed');
             internalConnections = internalConnections.filter(connection => connection !== ws);
             isInternalFrontendConnected = internalConnections.length > 0;
             sendStateToControlPanelClient?.();
@@ -97,22 +104,38 @@ export function initInternalServer() {
         sendControlPanelState(ws);
 
 
-        console.log('Internal WebSocket connection established');
+        logEvent({
+            description: `Controlpanel WebSocket connection established`,
+            errorType: ErrorType.INFO,
+            date: new Date().toString()
+        })
 
         ws.on('message', async (message) => {
             try {
                 const data = JSON.parse(message.toString());
                 if (data.action === 'resetGame') {
-                    console.log('Resetting game state from control panel');
+                    logEvent({
+                        description: `Resetting game state from control panel`,
+                        errorType: ErrorType.INFO,
+                        date: new Date().toString()
+                    })
                   GameManager.resetGame(false);
                 } else if (data.action === 'sendState') {
                     sendControlPanelState(ws);
                 } else if (data.action === 'switchToState' && data.stateName != null) {
                     if (!Object.keys(gameStates).includes(data.stateName)) {
-                        console.warn('Unknown state name received:', data.stateName);
+                        logEvent({
+                            description: 'Unknown state name received: ' + data.stateName,
+                            errorType: ErrorType.WARNING,
+                            date: new Date().toString()
+                        })
                         return;
                     } else {
-                        console.log('Switching to state:', data.stateName);
+                        logEvent({
+                            description: `Switching to state: ${data.stateName}`,
+                            errorType: ErrorType.INFO,
+                            date: new Date().toString()
+                        })
                         GameManager.switchState(gameStates[data.stateName as keyof typeof gameStates], data.stateData);
                         GameManager.handleStateTransition(GameManager.currentGameState.action(data.stateData), GameManager.currentGameState);
                         sendStateToControlPanelClient!();
@@ -149,7 +172,11 @@ export function initInternalServer() {
                             RV6L_STATE.mock = data.mock;
                             sendStateToControlPanelClient!();
                         } else {
-                            console.warn('Invalid mock value received:', data.mock);
+                            logEvent({
+                                description: 'Invalid mock value received: ' + data.mock,
+                                errorType: ErrorType.WARNING,
+                                date: new Date().toString()
+                            });
                         }
                     }
                 }else if(data.action === "setBoard") {
@@ -158,26 +185,37 @@ export function initInternalServer() {
                         sendState()
 
                     } else {
-                        console.warn('Invalid board data received:', data.board);
+                        logEvent({
+                            description: 'Invalid board data received: ' + JSON.stringify(data.board),
+                            errorType: ErrorType.WARNING,
+                            date: new Date().toString()
+                        });
                     }
                 } else {
-                    console.warn('Unknown action received:', data.action);
+                    logEvent({
+                        description: 'Unknown action received: ' + data.action,
+                        errorType: ErrorType.WARNING,
+                        date: new Date().toString()
+                    });
                 }
             } catch (error) {
-                console.error('Error processing message:', error);
+                logEvent({
+                    errorType: ErrorType.WARNING,
+                    description: `Error processing message from control panel: ${message.toString()}`,
+                    date: new Date().toString()
+                });
             }
 
         });
 
         ws.on('close', () => {
-            console.log('WebSocket connection closed');
             controlPanelConnections = controlPanelConnections.filter(connection => connection !== ws);
         });
 
     });
 
     app.listen(port, () => {
-        console.log(`Internal server listening on port ${port}`)
+
     })
 
 }
@@ -210,7 +248,11 @@ function sendControlPanelState(ws: WebSocket) {
             "data": data
         }));
     } else {
-        console.error('WebSocket is not open. Cannot send state.');
+        logEvent({
+            errorType: ErrorType.WARNING,
+            description: 'WebSocket is not open. Cannot send state.',
+            date: new Date().toString()
+        });
     }
 }
 
@@ -230,6 +272,10 @@ function sendInternalState(ws: WebSocket) {
             qrCodeLink: FRONTEND_ADDRESS + "/play?sessionID=" + sessionState.currentSessionID,
         }));
     } else {
-        console.error('WebSocket is not open. Cannot send state.');
+        logEvent({
+            errorType: ErrorType.WARNING,
+            description: 'WebSocket is not open. Cannot send state.',
+            date: new Date().toString()
+        });
     }
 }

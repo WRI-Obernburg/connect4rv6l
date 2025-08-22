@@ -1,5 +1,6 @@
 import * as c4 from "connect4-ai";
 import {resetGameState, state} from "../state.ts";
+import {ErrorType, logEvent} from "../errorHandler/error_handler.ts";
 
 export const game = new c4.Connect4AI();
 
@@ -12,11 +13,19 @@ export function resetGame() {
 export function playMove(column: number):boolean {
 
     if(!game.canPlay(column)) {
-        console.error("Cannot play move: Invalid column or column is full.");
+        logEvent({
+            errorType: ErrorType.WARNING,
+            description: `Player attempted to play in invalid column: ${column}`,
+            date: new Date().toString()
+        });
         return false;
     }
 
-    console.log(`Player placed chip in column: ${column}`);
+    logEvent({
+        errorType: ErrorType.INFO,
+        description: `Player placed chip in column: ${column}`,
+        date: new Date().toString()
+    })
 
     game.play(column);
 
@@ -30,7 +39,11 @@ export function playMove(column: number):boolean {
 export function playAIMove(): number {
     const moveByAI = game.playAI(state.difficulty);
 
-    console.log(`Robot played column: ${moveByAI}`);
+    logEvent({
+        errorType: ErrorType.INFO,
+        description: `Robot placed chip in column: ${moveByAI}`,
+        date: new Date().toString()
+    });
 
     return moveByAI;
 }

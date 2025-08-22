@@ -2,7 +2,7 @@ import * as net from 'net';
 import { XMLParser } from 'fast-xml-parser';
 import * as stream from 'stream';
 import { sendStateToControlPanelClient } from "./internal_server.ts";
-import { ErrorType, throwError } from "./errorHandler/error_handler.ts";
+import { ErrorType, logEvent } from "./errorHandler/error_handler.ts";
 import EventEmitter from "events";
 
 var client = new net.Socket();
@@ -27,13 +27,16 @@ function startAction(actionName: string) {
     RV6L_STATE.state = actionName;
     RV6L_STATE.rv6l_moving = true;
     sendStateToControlPanelClient?.();
-    console.log(`Starting action: ${actionName}`);
 }
 
 function stopAction(actionName: string) {
     if (RV6L_STATE.state === actionName) {
         const duration = new Date().getTime() - new Date(RV6L_STATE.actionStartTime).getTime();
-        console.log(`Action ${actionName} completed in ${duration}ms`);
+        logEvent({
+            errorType: ErrorType.INFO,
+            description: `Action ${actionName} completed in ${duration}ms`,
+            date: new Date().toString()
+        });
         RV6L_STATE.state = "IDLE";
         RV6L_STATE.rv6l_moving = false;
         sendStateToControlPanelClient?.();
@@ -41,7 +44,11 @@ function stopAction(actionName: string) {
 }
 
 export function interruptRV6LAction() {
-    console.log("Interrupting RV6L action");
+    logEvent({
+        errorType: ErrorType.WARNING,
+        description: "Interrupting RV6L action",
+        date: new Date().toString()
+    })
     abortSignal.emit('abort'); // Emit the abort signal to cancel any ongoing operations
     RV6L_STATE.rv6l_moving = false;
     sendStateToControlPanelClient?.();
@@ -49,40 +56,35 @@ export function interruptRV6LAction() {
 
 export function initRV6LClient() {
     if (RV6L_STATE.mock) {
-        console.log("WARNING: MOCK_RV6L is enabled, using mock data instead of real RV6L connection.");
-        throwError({
+        logEvent({
             errorType: ErrorType.WARNING,
             description: "RV6L is in MOCK mode, using mock data instead of real RV6L connection.",
             date: new Date().toString()
         })
         return;
     }
+    client = new net.Socket();
     client.connect(80, '192.168.2.1', async function () {
 
-        console.log('Connected');
+        logEvent({
+            errorType: ErrorType.INFO,
+            description: "Connected to RV6L",
+            date: new Date().toString()
+        })
+
         RV6L_STATE.rv6l_connected = true;
         sendStateToControlPanelClient?.();
 
-        // START SESSION	const getVariable = "<RSVCMD><clientStamp>123</clientStamp><symbolApi><readSymbolValue><name>IMOVE</name><prog>S:/PROG/4GEWINNT/4GEWINNT</prog></readSymbolValue></symbolApi></RSVCMD>"
-        // SEND COMMAND
         const startSessionCommand = 'SYMTABLE_SESSION / \n';
         client.write(startSessionCommand);
 
-        await initSymTable()
-        await initChipPalletizing();
-
-        /*await moveToBlue();
-        await moveToColumn(1);
-	
-        await moveToRed();
-        await moveToColumn(1)*/
+        await initSymTable().catch((err) => {})
+       // await initChipPalletizing()
 
 
     });
 
     client.on('data', function (data) {
-        //console.log('Received: ' + data);
-
         //seperate data string after </RSVRES> and process each
         const dataString = data.toString();
         const messages = dataString.split('</RSVRES>');
@@ -96,20 +98,23 @@ export function initRV6LClient() {
 
     });
 
-    client.on('close', function () {
-        console.log('Connection closed');
+    client.on('close', async function () {
         RV6L_STATE.rv6l_connected = false;
-        throwError({
+        logEvent({
             errorType: ErrorType.FATAL,
             description: "RV6L connection closed unexpectedly. Reconnecting...",
             date: new Date().toString()
         })
         sendStateToControlPanelClient?.();
-        console.log("Reconnecting to RV6L...");
-        setTimeout(() => {
-            initRV6LClient();
-        }
-        , 5000); // Reconnect after 5 seconds
+        await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for 5 seconds before reconnecting
+        logEvent({
+            errorType: ErrorType.INFO,
+            description: "Reconnecting to RV6L...",
+            date: new Date().toString()
+        })
+        client.destroy(); // Destroy the current client connection
+        RV6L_STATE.globalMessageCounter = 0; // Reset the message counter
+        initRV6LClient(); // Reinitialize the RV6L client
 
     });
 }
@@ -126,8 +131,7 @@ export async function moveToBlue() {
             await writeVariableInProc("IMOVE", "1");
             await movementDone();
         } catch (error) {
-            console.error("Couldn't complete blue chip graping", error);
-            throwError({
+            logEvent({
                 errorType: ErrorType.FATAL,
                 description: "Couldn't complete blue chip graping",
                 date: new Date().toString()
@@ -150,8 +154,7 @@ export async function moveToRed() {
             await writeVariableInProc("IMOVE", "2");
             await movementDone();
         } catch (error) {
-            console.error("Couldn't complete red chip graping", error);
-            throwError({
+            logEvent({
                 errorType: ErrorType.FATAL,
                 description: "Couldn't complete red chip graping",
                 date: new Date().toString()
@@ -184,8 +187,7 @@ export async function moveToColumn(column: number) {
             await writeVariableInProc("IMOVE", (11 + column).toString());
             await movementDone();
         } catch (error) {
-            console.error("Couldn't complete move to column " + column, error);
-            throwError({
+            logEvent({
                 errorType: ErrorType.FATAL,
                 description: "Couldn't complete move to column " + column,
                 date: new Date().toString()
@@ -207,8 +209,7 @@ export async function initChipPalletizing() {
             await writeVariableInProc("IMOVE", "3");
             await movementDone()
         } catch (error) {
-            console.error("Couldn't complete chip palletizing initialization", error);
-            throwError({
+            logEvent({
                 errorType: ErrorType.FATAL,
                 description: "Couldn't complete chip palletizing initialization",
                 date: new Date().toString()
@@ -230,8 +231,7 @@ export async function moveToRefPosition() {
             await writeVariableInProc("IMOVE", "4");
             await movementDone();
         } catch (error) {
-            console.error("Couldn't complete move to reference position", error);
-            throwError({
+            logEvent({
                 errorType: ErrorType.FATAL,
                 description: "Couldn't complete move to reference position",
                 date: new Date().toString()
@@ -246,7 +246,7 @@ async function movementDone() {
     try {
         await waitForVariablePolling("IMOVE", "0");
     } catch (error) {
-        throwError({
+        logEvent({
             errorType: ErrorType.FATAL,
             description: "Error while waiting for movement to complete",
             date: new Date().toString()
@@ -288,7 +288,7 @@ async function waitForVariablePolling(variable: string, value: string) {
             abort = true;
             abortSignal.removeListener('abort', cancel); // Remove the abort listener
             clearTimeout(timeoutID); // Clear the timeout if cancelled
-            throwError({
+            logEvent({
                 errorType: ErrorType.FATAL,
                 description: `Canceled waiting for variable ${variable} to be ${value}`,
                 date: new Date().toString()
@@ -314,7 +314,6 @@ async function readVariableInProc(name: string): Promise<string> {
 }
 
 async function initSymTable() {
-    console.log("Initializing symbol table...");
     let messageId = getNextMessageId();
     const initSymbolsCommand = `<RSVCMD><clientStamp>${messageId}</clientStamp><symbolApi><initSymbolTable/></symbolApi></RSVCMD>`;
     client.write(initSymbolsCommand);
@@ -334,8 +333,6 @@ async function writeVariableInProc(name: string, value: string) {
 }
 
 export async function toggleGripper(on: boolean) {
-    console.log("Toggling gripper to " + (on ? "ON" : "OFF"));
-
     if (RV6L_STATE.mock) {
         await wait(1000); // Simulate delay for mock
         return;
@@ -350,12 +347,15 @@ export async function toggleGripper(on: boolean) {
 
 async function waitForMessage(id: number): Promise<any> {
 
-
     return new Promise((resolve, reject) => {
         const onDataCallback = (data: any) => {
             const jsonObj = JSON.parse(data.toString());
-            if (jsonObj.RSVRES.clientStamp !== id) {
-                return; // Ignore messages with different clientStamp
+            try{
+                if (jsonObj.RSVRES.clientStamp !== id) {
+                    return; // Ignore messages with different clientStamp
+                }
+            }catch(e){
+                return;
             }
             resolve(jsonObj);
             incommingStream.off('data', onDataCallback); // Remove the listener after resolving

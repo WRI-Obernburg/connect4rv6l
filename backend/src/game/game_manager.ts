@@ -1,6 +1,6 @@
 import {playerSelection, PlayerSelectionAbortError, waitForTimeout, withTimeout} from "./game_utils.ts";
 import {moveToBlue, moveToColumn, moveToRed} from "../rv6l_client.ts";
-import {type ErrorDescription, ErrorType, throwError} from "../errorHandler/error_handler.ts";
+import {type ErrorDescription, ErrorType, logEvent} from "../errorHandler/error_handler.ts";
 import {applyGameMove, checkGameState, playAIMove, playMove, resetGame} from "./game.ts";
 import {sendState, state} from "../state.ts";
 import type GameState from "./game_state.ts";
@@ -29,7 +29,11 @@ const PlayerSelect: GameState<void, number> = {
             if (playMove(selection)) {
                 sendState();
             } else {
-                console.error("Player selection failed, resetting game.");
+                logEvent({
+                    errorType: ErrorType.WARNING,
+                    description: "Player selection failed, invalid column selected.",
+                    date: new Date().toString()
+                });
                 GameManager.raiseError({
                     errorType: ErrorType.FATAL,
                     description: "Player selection failed, invalid column selected.",
@@ -58,7 +62,11 @@ const PlayerSelect: GameState<void, number> = {
                     output: -1
                 }
             } else {
-                console.error("Player selection timed out, resetting game.");
+                logEvent({
+                    errorType: ErrorType.WARNING,
+                    description: "Player selection timed out, resetting game.",
+                    date: new Date().toString()
+                });
                 GameManager.raiseError({
                     errorType: ErrorType.WARNING,
                     description: "Player selection timed out, resetting game.",
@@ -354,7 +362,11 @@ GameManager = {
     gameEvent: new EventEmitter(),
 
     switchState: (newState: GameState<any, any>, newStateData: any) => {
-        console.log(`Switching state from ${GameManager.currentGameState.stateName} to ${newState.stateName}`);
+        logEvent({
+            errorType: ErrorType.INFO,
+            description: `Switching to state: ${newState.stateName}`,
+            date: new Date().toString()
+        })
         GameManager.gameEvent.emit("stateChange");
         GameManager.currentGameState.endTime = new Date();
         GameManager.currentGameState = newState;
@@ -394,7 +406,6 @@ GameManager = {
         try {
             data = await dataPromise;
         } catch (e: any) {
-            console.error("Error during state transition:", e);
             GameManager.raiseError({
                 errorType: ErrorType.FATAL,
                 description: "An error occurred during state " + callingState.stateName,
@@ -415,7 +426,6 @@ GameManager = {
         }
     },
     raiseError: (error: ErrorDescription) => {
-        console.error(`Error raised in game: ${error.description} (${error.errorType})`);
-        throwError(error);
+        logEvent(error);
     }
 };

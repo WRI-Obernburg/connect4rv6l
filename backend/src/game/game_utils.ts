@@ -1,5 +1,5 @@
 import {playerDataStream} from "../game_server.ts";
-import {ErrorType, throwError} from "../errorHandler/error_handler.ts";
+import {ErrorType, logEvent} from "../errorHandler/error_handler.ts";
 
 
 export function playerSelection(): {promise: Promise<number>, abort: () => void} {

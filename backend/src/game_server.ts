@@ -1,12 +1,12 @@
 import express from "express";
 import {sendState, state} from "./state";
 import expressWs from 'express-ws'
-import {playMove, resetGame} from "./game/game.ts";
 import cors from 'cors';
 import {initSession, sessionState} from "./session";
 import {sendStateToControlPanelClient, sendStateToInternalClient} from "./internal_server";
 import stream from "stream";
 import {GameManager} from "./game/game_manager.ts";
+import {ErrorType, logEvent} from "./errorHandler/error_handler.ts";
 
 const port = 3000
 
@@ -31,10 +31,8 @@ export function initServer() {
 
     app.ws('/play', function (ws, req) {
         const sessionID = req.query.sessionID;
-        console.log("sessionID", sessionID);
         let isPlayer = false;
         if (sessionID && (sessionID === previousSessionID || sessionID === sessionState.currentSessionID)) {
-            console.log(`WebSocket connection established with session ID: ${sessionID}`);
 
             state.isPlayerConnected = true;
             isPlayer = true;
@@ -43,7 +41,11 @@ export function initServer() {
                 if (ws.readyState === ws.OPEN) {
                     ws.send(JSON.stringify(state));
                 } else {
-                    console.error('WebSocket is not open. Cannot send state.');
+                    logEvent({
+                        errorType: ErrorType.WARNING,
+                        description: 'WebSocket is not open. Cannot send state.',
+                        date: new Date().toString()
+                    })
                 }
             };
 
@@ -51,7 +53,11 @@ export function initServer() {
 
         } else {
             ws.close(4422, 'Invalid session ID');
-            console.log(`WebSocket connection closed due to invalid session ID: ${sessionID}`);
+            logEvent({
+                errorType: ErrorType.WARNING,
+                description: `WebSocket connection closed due to invalid session ID: ${sessionID}`,
+                date: new Date().toString()
+            })
             return;
         }
         ws.on('message', function (msg) {
@@ -72,16 +78,22 @@ export function initServer() {
                     if (parsedMSG.difficulty && ['easy', 'medium', 'hard'].includes(parsedMSG.difficulty)) {
                         state.lastUserInteraction = Date.now();
                         state.difficulty = parsedMSG.difficulty;
-                        console.log(`Difficulty set to: ${state.difficulty}`);
                         sendState();
                     } else {
-                        console.error('Invalid difficulty level provided.');
+                        logEvent({
+                            errorType: ErrorType.WARNING,
+                            description: `Invalid difficulty level provided: ${parsedMSG.difficulty}`,
+                            date: new Date().toString()
+                        });
                     }
                 }
 
             } catch (e) {
-                console.error('Error parsing message:', e);
-                console.log("ERROR")
+                logEvent({
+                    errorType: ErrorType.WARNING,
+                    description: `Error parsing message from player: ${msg.toString()}`,
+                    date: new Date().toString()
+                });
                 return;
             }
         });
@@ -99,7 +111,7 @@ export function initServer() {
 
 
     app.listen(port, () => {
-        console.log(`RV6L app listening on port ${port}`)
+
     })
 }
 
@@ -110,7 +122,11 @@ function handlePlaceChip(parsedMSG: any) {
             type: "placeChip"
         }));
     } else {
-        console.error('Invalid slot number provided for placing chip. ' + parsedMSG.slot);
+        logEvent({
+            errorType: ErrorType.WARNING,
+            description: `Invalid slot number provided for placing chip: ${parsedMSG.slot}`,
+            date: new Date().toString()
+        })
     }
 }
 
