@@ -8,8 +8,8 @@ RUN cd localfrontend && bun install && bun run build
 
 
 FROM oven/bun:alpine
-COPY --from=0 /build/controlpanel/dist /app/controlpanel
-COPY --from=0 /build/localfrontend/dist /app/localfrontend
+COPY --from=0 /build/controlpanel/dist /app/controlpanel/dist
+COPY --from=0 /build/localfrontend/dist /app/localfrontend/dist
 COPY --from=0 /build/backend /app/backend
 WORKDIR /app/backend
 RUN bun install
