@@ -11,9 +11,10 @@ env:
 
 jobs:
   build-and-push-image:
-    runs-on: [ubuntu-24.04-arm, ubuntu-24.04]
+    runs-on: runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false        
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
     permissions:
       contents: read
       packages: write
