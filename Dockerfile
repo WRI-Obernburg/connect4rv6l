@@ -7,7 +7,7 @@ RUN cd controlpanel && bun install && bun run build
 RUN cd localfrontend && bun install && bun run build
 
 
-FROM oven/bun:latest
+FROM oven/bun:alpine
 COPY --from=0 /build/controlpanel/dist /app/controlpanel
 COPY --from=0 /build/localfrontend/dist /app/localfrontend
 COPY --from=0 /build/backend /app/backend
