@@ -19,7 +19,7 @@ export async function initErrorHandler() {
         errors = JSON.parse(errorFileContent);
     } catch (e) {
 
-        await errorFile.write("[]");
+        //await errorFile.write("[]");
     }
 }
 
@@ -27,7 +27,7 @@ export async function logEvent(error: ErrorDescription) {
     errors.push(error);
     console.log(`#${errors.length} | Level ${error.errorType} | ${error.description}`)
     //write to file
-    await errorFile.write(JSON.stringify(errors))
+  //  await errorFile.write(JSON.stringify(errors))
 
     if(error.errorType === ErrorType.FATAL) {
         GameManager.switchState(gameStates.ERROR, error);

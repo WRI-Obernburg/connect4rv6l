@@ -101,12 +101,12 @@ export function initRV6LClient() {
     client.on('close', async function () {
         RV6L_STATE.rv6l_connected = false;
         logEvent({
-            errorType: ErrorType.FATAL,
+            errorType: ErrorType.WARNING,
             description: "RV6L connection closed unexpectedly. Reconnecting...",
             date: new Date().toString()
         })
         sendStateToControlPanelClient?.();
-        await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for 5 seconds before reconnecting
+        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 5 seconds before reconnecting
         logEvent({
             errorType: ErrorType.INFO,
             description: "Reconnecting to RV6L...",
@@ -128,7 +128,7 @@ export async function moveToBlue() {
         await wait(1000); // Simulate delay for mock
     } else {
         try {
-            await writeVariableInProc("IMOVE", "1");
+            await writeVariableInProc("I_Aktion", "11");
             await movementDone();
         } catch (error) {
             logEvent({
@@ -151,7 +151,7 @@ export async function moveToRed() {
         await wait(1000); // Simulate delay for mock
     } else {
         try {
-            await writeVariableInProc("IMOVE", "2");
+            await writeVariableInProc("I_Aktion", "21");
             await movementDone();
         } catch (error) {
             logEvent({
@@ -184,7 +184,8 @@ export async function moveToColumn(column: number) {
         await wait(1000); // Simulate delay for mock
     } else {
         try {
-            await writeVariableInProc("IMOVE", (11 + column).toString());
+            await writeVariableInProc("IX_Schacht", column.toString());
+            await writeVariableInProc("I_Aktion", "31");
             await movementDone();
         } catch (error) {
             logEvent({
@@ -206,7 +207,9 @@ export async function initChipPalletizing() {
         await wait(1000); // Simulate delay for mock
     } else {
         try {
-            await writeVariableInProc("IMOVE", "3");
+            await writeVariableInProc("I_Aktion", "10");
+            await movementDone()
+            await writeVariableInProc("I_Aktion", "20");
             await movementDone()
         } catch (error) {
             logEvent({
@@ -228,7 +231,7 @@ export async function moveToRefPosition() {
         await wait(1000); // Simulate delay for mock
     } else {
         try {
-            await writeVariableInProc("IMOVE", "4");
+            await writeVariableInProc("I_Aktion", "90");
             await movementDone();
         } catch (error) {
             logEvent({
@@ -242,9 +245,71 @@ export async function moveToRefPosition() {
     stopAction("MoveToRefPosition");
 }
 
+export async function removeFromField(x: number, y:number) {
+    startAction("RemoveFromField");
+    if( RV6L_STATE.mock) {
+        await wait(1000); // Simulate delay for mock
+    }else {
+        try {
+            await writeVariableInProc("IX_Feld", x.toString());
+            await writeVariableInProc("IZ_Feld", y.toString());
+            await writeVariableInProc("I_Aktion", "41");
+            await movementDone();
+        } catch (error) {
+            logEvent({
+                errorType: ErrorType.FATAL,
+                description: "Couldn't complete remove from field at position X:" + x + " Y:" + y,
+                date: new Date().toString()
+            });
+        }
+    }
+
+    stopAction("RemoveFromField");
+}
+
+export async function putBackToBlue() {
+    startAction("PutBackToBlue");
+    if( RV6L_STATE.mock) {
+        await wait(1000); // Simulate delay for mock
+    }else {
+        try {
+            await writeVariableInProc("I_Aktion", "12");
+            await movementDone();
+        } catch (error) {
+            logEvent({
+                errorType: ErrorType.FATAL,
+                description: "Couldn't complete put back to blue",
+                date: new Date().toString()
+            });
+        }
+    }
+    RV6L_STATE.blueChipsLeft++;
+    stopAction("PutBackToBlue");
+}
+
+export async function putBackToRed() {
+    startAction("PutBackToRed");
+    if( RV6L_STATE.mock) {
+        await wait(1000); // Simulate delay for mock
+    }else {
+        try {
+            await writeVariableInProc("I_Aktion", "22");
+            await movementDone();
+        } catch (error) {
+            logEvent({
+                errorType: ErrorType.FATAL,
+                description: "Couldn't complete put back to red",
+                date: new Date().toString()
+            });
+        }
+    }
+    RV6L_STATE.redChipsLeft++;
+    stopAction("PutBackToRed");
+}
+
 async function movementDone() {
     try {
-        await waitForVariablePolling("IMOVE", "0");
+        await waitForVariablePolling("I_Aktion", "0");
     } catch (error) {
         logEvent({
             errorType: ErrorType.FATAL,
@@ -305,7 +370,7 @@ async function waitForVariablePolling(variable: string, value: string) {
 
 async function readVariableInProc(name: string): Promise<string> {
     let messageId = getNextMessageId();
-    const getVariable = `<RSVCMD><clientStamp>${messageId}</clientStamp><symbolApi><readSymbolValue><name>IMOVE</name></readSymbolValue></symbolApi></RSVCMD>`
+    const getVariable = `<RSVCMD><clientStamp>${messageId}</clientStamp><symbolApi><readSymbolValue><name>${name}</name></readSymbolValue></symbolApi></RSVCMD>`
     client.write(getVariable);
 
     const result = await waitForMessage(messageId);

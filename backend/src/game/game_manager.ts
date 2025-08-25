@@ -1,5 +1,5 @@
 import {playerSelection, PlayerSelectionAbortError, waitForTimeout, withTimeout} from "./game_utils.ts";
-import {moveToBlue, moveToColumn, moveToRed} from "../rv6l_client.ts";
+import {moveToBlue, moveToColumn, moveToRed, putBackToBlue, putBackToRed, removeFromField} from "../rv6l_client.ts";
 import {type ErrorDescription, ErrorType, logEvent} from "../errorHandler/error_handler.ts";
 import {applyGameMove, checkGameState, playAIMove, playMove, resetGame} from "./game.ts";
 import {sendState, state} from "../state.ts";
@@ -221,16 +221,24 @@ const Error: GameState<void, void> = {
 
 const CleanUp: GameState<boolean, void> = {
     stateName: "CLEAN_UP",
-    expectedDuration: 1000 * 60 * 2,
+    expectedDuration: 1000 * 60 * 10, //10 mins
     startTime: null,
     endTime: null,
     action: async (instantRestart: boolean) => {
-        resetGame();
-        if (!GameManager.isPhysicalBoardCleaned) {
-            await withTimeout(new Promise<void>((resolve) => {
-                setTimeout(resolve, 1000 * 3);
-            }), CleanUp.expectedDuration!);
+
+        for (let i = 0; i < 6; i++) {
+            if (state.board == null) break;
+            for (let row = 0; row < (state.board![i] as number[]).length; row++) {
+                const element = (state.board![i] as number[]).reverse()[row];
+                await removeFromField(i, (state.board![i] as number[]).length - row - 1);
+                if (element === 1) {
+                    await putBackToRed();
+                } else if (element === 2) {
+                    await putBackToBlue();
+                }
+            }
         }
+        resetGame();
 
         if (instantRestart) {
             state.gameStartTime = Date.now();
@@ -281,7 +289,7 @@ const Sleep: GameState<void, void> = {
     expectedDuration: null,
     startTime: null,
     endTime: null,
-   
+
     action: async () => {
         return {
             canContinue: false,

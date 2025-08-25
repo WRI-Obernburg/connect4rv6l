@@ -16,7 +16,10 @@ import {
     moveToRed,
     moveToRefPosition,
     RV6L_STATE,
-    toggleGripper
+    toggleGripper,
+    removeFromField,
+    putBackToBlue,
+    putBackToRed
 } from "./rv6l_client.ts";
 import {type ErrorDescription, errors, ErrorType, logEvent} from "./errorHandler/error_handler.ts";
 
@@ -160,6 +163,28 @@ export function initInternalServer() {
                         }
                     } else if (data.command === "init_chip_palletizing") {
                         await initChipPalletizing();
+                        sendStateToControlPanelClient!();
+                    }else if (data.command === "clean_board_at") {
+                        if (data.x == null || data.y == null) {
+                            logEvent({
+                                description: 'Invalid coordinates for cleanBoardAt command: ' + JSON.stringify({
+                                    x: data.x,
+                                    y: data.y
+                                }),
+                                errorType: ErrorType.WARNING,
+                                date: new Date().toString()
+                            });
+                            return;
+                        }
+
+                        await removeFromField(data.x, data.y);
+                        sendStateToControlPanelClient!();
+
+                    } else if(data.command === "put_back_blue") {
+                        await putBackToBlue();
+                        sendStateToControlPanelClient!();
+                    }else if(data.command === "put_back_red") {
+                        await putBackToRed();
                         sendStateToControlPanelClient!();
                     } else if (data.command === "move_to_ref_pos") {
                         await moveToRefPosition();
