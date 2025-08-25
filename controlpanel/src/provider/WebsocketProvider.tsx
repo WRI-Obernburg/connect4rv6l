@@ -39,7 +39,7 @@ export default function WebsocketProvider({
                   setGameData(data.data as GameData);
                 }else if(data.type === "error") {
                   console.log("Error received from server:", data.error);
-                  toast.error(`${data.error.errorType===0?} ${data.error.description}`, {
+                  toast.error(`${data.error.errorType===0?"Fehler: ":"Event: "}${data.error.description}`, {
                     description: `Eventart: ${data.error.errorType} | Datum: ${data.error.date}`,
                     duration: 7000,
                     style: {
