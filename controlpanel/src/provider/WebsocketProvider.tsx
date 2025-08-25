@@ -43,8 +43,8 @@ export default function WebsocketProvider({
                     description: `Fehlerart: ${data.error.errorType} | Datum: ${data.error.date}`,
                     duration: 7000,
                     style: {
-                      backgroundColor: '#f87171', // Tailwind red-400
-                      color: '#fff',
+                      backgroundColor: data.error.errorType === 0?'#f87171':'#fff', // Tailwind red-400
+                      color: data.error.errorType === 0?'#fff':'#000',
                     },
                   });
                 }

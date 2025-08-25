@@ -21,7 +21,7 @@ function App() {
     lastJsonMessage,
     readyState,
     getWebSocket,
-  } = useWebSocket("http://wriros.local:4000/ws", {
+  } = useWebSocket(`ws://${(typeof window !== "undefined")?window.location.hostname:""}:4000/ws`, {
     onOpen: () => console.log('opened'),
     onClose: () => {
       setQrCodeLink(null);
