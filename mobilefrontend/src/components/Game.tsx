@@ -1,7 +1,7 @@
-import { GameState } from "@/interface/GameState";
-import { useState } from "react";
+import {GameState} from "@/interface/GameState";
+import {useState} from "react";
 import useWebSocket from "react-use-websocket";
-import { Button } from "@/components/ui/button"
+import {Button} from "@/components/ui/button"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -14,7 +14,7 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import DifficultyChooser from "./DifficulityChooser";
-import { GameField } from "./GameField";
+import {GameField} from "./GameField";
 
 export default function Game(props: { sessionID: string, indoor: boolean }) {
 
@@ -113,10 +113,24 @@ export default function Game(props: { sessionID: string, indoor: boolean }) {
         </div>
     }
 
+    let gameBoard = gameState.board;
+    if(!props.indoor && gameBoard) {
+        // Flip the board for outdoor play
+        gameBoard = {
+            0: gameBoard[6],
+            1: gameBoard[5],
+            2: gameBoard[4],
+            3: gameBoard[3],
+            4: gameBoard[2],
+            5: gameBoard[1],
+            6: gameBoard[0],
+        };
+    }
+
     return <div className="flex flex-col gap-4 justify-center mt-4 items-center">
         <CurrentAction gameState={gameState} />
 
-        <GameField board={gameState.board} interactive={true} xl={false} onColumnClick={handleColumnClick} isPlayerTurn={gameState.stateName === "PLAYER_SELECTION"} />
+        <GameField board={gameBoard} interactive={true} xl={false} onColumnClick={handleColumnClick} isPlayerTurn={gameState.stateName === "PLAYER_SELECTION"} />
         <DifficultyChooser gameState={gameState} onDifficultyChange={handleDifficultyChange} ></DifficultyChooser>
 
         <StartGame onGameStart={() => {
