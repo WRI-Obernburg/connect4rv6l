@@ -72,7 +72,7 @@ function FrontendConnectQRCode(props: {gameData: GameData}) {
         <CardFooter>
             <p className={"flex flex-col gap-2"}>
                 <Link className={"flex flex-row gap-2 underline underline-offset-4"} target={"_blank"} href={props.gameData.qrCodeLink}><ExternalLink/> Mobilefrontend</Link>
-                <Link className={"flex flex-row gap-2 underline underline-offset-4"} target={"_blank"} href={"http://localhost:4000/localfrontend"}><ExternalLink/> Localfronted</Link>
+                <Link className={"flex flex-row gap-2 underline underline-offset-4"} target={"_blank"} href={`http://${(typeof window !== "undefined")?window.location.hostname:""}:4000/localfrontend`}><ExternalLink/> Localfronted</Link>
             </p>
         </CardFooter>
     </Card>
