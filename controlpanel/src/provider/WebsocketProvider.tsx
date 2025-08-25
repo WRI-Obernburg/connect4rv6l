@@ -39,8 +39,8 @@ export default function WebsocketProvider({
                   setGameData(data.data as GameData);
                 }else if(data.type === "error") {
                   console.log("Error received from server:", data.error);
-                  toast.error(`Fehler: ${data.error.description}`, {
-                    description: `Fehlerart: ${data.error.errorType} | Datum: ${data.error.date}`,
+                  toast.error(`${data.error.errorType===0?} ${data.error.description}`, {
+                    description: `Eventart: ${data.error.errorType} | Datum: ${data.error.date}`,
                     duration: 7000,
                     style: {
                       backgroundColor: data.error.errorType === 0?'#f87171':'#fff', // Tailwind red-400
