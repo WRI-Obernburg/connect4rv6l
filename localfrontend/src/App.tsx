@@ -6,6 +6,7 @@ import useWebSocket from 'react-use-websocket';
 import type { GameState } from './session';
 import Game from './components/Game';
 import { useQueryParam } from './lib/utils';
+import { useEffect } from 'react';
 import sleeping from "./assets/sleeping_rv6l.png";
 
 function App() {
@@ -46,6 +47,13 @@ function App() {
     }
 
   });
+
+    useEffect(() => {
+        setTimeout(()=>{
+            // @ts-ignore
+            window.location.reload(true);
+        },60*60*1000) // Refresh every 60 minutes to make sure its always the newst version
+    }, []);
 
   if (readyState !== 1 || state === null) {
     return <div className='flex flex-row items-center justify-center gap-16 w-screen"'>
