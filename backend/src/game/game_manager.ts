@@ -228,8 +228,8 @@ const CleanUp: GameState<boolean, void> = {
 
         for (let i = 0; i < 6; i++) {
             if (state.board == null) break;
-            for (let row = 0; row < (state.board![i] as number[]).length; row++) {
-                const element = (state.board![i] as number[]).reverse()[row];
+            for (let row = (state.board![i] as number[]).length - 1; row >= 0; row--) {
+                const element = (state.board![i] as number[])[row];
                 await removeFromField(i, (state.board![i] as number[]).length - row - 1);
                 if (element === 1) {
                     await putBackToRed();
