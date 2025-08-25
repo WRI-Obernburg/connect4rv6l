@@ -29,6 +29,10 @@ export default function ManualControlPage() {
             <CardHeader>
                 <CardTitle>Manuelle Steuerung</CardTitle>
                 <p>{gameDataContext!.rv6l.connected ? "RV6L verbunden" : "ACHTUNG: Keine Verbindung zum RV6L!"}</p>
+                <p>RV6L-Zustand: {gameDataContext!.rv6l.state}</p>
+                <p>{gameDataContext!.rv6l.moving ? "RV6L bewegt sich" : "RV6L steht"}</p>
+                <p>MSG-Counter: {gameDataContext!.rv6l.messageCounter}</p>
+                <p>Übrige Chips Rot: {gameDataContext!.rv6l.redChipsLeft} Blau: {gameDataContext!.rv6l.blueChipsLeft}</p>
                 <p className={"text-red-500"}>{gameDataContext!.rv6l.mock && "RV6L Verbindung wird gemockt!"}</p>
 
             </CardHeader>
