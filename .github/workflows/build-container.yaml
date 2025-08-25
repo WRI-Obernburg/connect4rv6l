@@ -12,6 +12,12 @@ env:
 jobs:
   build-and-push-image:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture:
+          - amd64
+          - arm64
     permissions:
       contents: read
       packages: write
@@ -44,15 +50,15 @@ jobs:
           driver-opts: image=moby/buildkit:v0.23.2
 
 
-      - name: Build and push Docker image
+      - name: Build Docker Container
         id: push
-        uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
+        uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
+          platforms: linux/${{ matrix.architecture }}
+          labels: ${{ steps.meta.outputs.labels}}
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64,linux/arm64
+          push: true
       
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v2
