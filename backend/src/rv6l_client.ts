@@ -54,7 +54,7 @@ export function interruptRV6LAction() {
     sendStateToControlPanelClient?.();
 }
 
-export function initRV6LClient() {
+export async function initRV6LClient() {
     if (RV6L_STATE.mock) {
         logEvent({
             errorType: ErrorType.WARNING,
@@ -64,47 +64,69 @@ export function initRV6LClient() {
         return;
     }
     client = new net.Socket();
-    client.connect(80, '192.168.2.1', async function () {
+    try {
+        client.connect(80, '192.168.2.1', async function () {
 
-        logEvent({
-            errorType: ErrorType.INFO,
-            description: "Connected to RV6L",
-            date: new Date().toString()
-        })
+            logEvent({
+                errorType: ErrorType.INFO,
+                description: "Connected to RV6L",
+                date: new Date().toString()
+            })
 
-        RV6L_STATE.rv6l_connected = true;
-        sendStateToControlPanelClient?.();
+            RV6L_STATE.rv6l_connected = true;
+            sendStateToControlPanelClient?.();
 
-        const startSessionCommand = 'SYMTABLE_SESSION / \n';
-        client.write(startSessionCommand);
+            const startSessionCommand = 'SYMTABLE_SESSION / \n';
+            client.write(startSessionCommand);
 
-        await initSymTable().catch((err) => {})
-       // await initChipPalletizing()
+            await initSymTable().catch((err) => {
+            })
+            // await initChipPalletizing()
 
 
-    });
-
-    client.on('data', function (data) {
-        //seperate data string after </RSVRES> and process each
-        const dataString = data.toString();
-        const messages = dataString.split('</RSVRES>');
-        messages.forEach((message) => {
-            if (message.trim()) { // Check if the message is not empty
-                const completeMessage = message + '</RSVRES>';
-                const jsonObj = parser.parse(completeMessage);
-                incommingStream.write(JSON.stringify(jsonObj)); // Write the complete message to the stream
-            }
         });
 
-    });
+        client.on('data', function (data) {
+            //seperate data string after </RSVRES> and process each
+            const dataString = data.toString();
+            const messages = dataString.split('</RSVRES>');
+            messages.forEach((message) => {
+                if (message.trim()) { // Check if the message is not empty
+                    const completeMessage = message + '</RSVRES>';
+                    const jsonObj = parser.parse(completeMessage);
+                    incommingStream.write(JSON.stringify(jsonObj)); // Write the complete message to the stream
+                }
+            });
 
-    client.on('close', async function () {
-        RV6L_STATE.rv6l_connected = false;
+        });
+
+        client.on('close', async function () {
+            RV6L_STATE.rv6l_connected = false;
+            logEvent({
+                errorType: ErrorType.WARNING,
+                description: "RV6L connection closed unexpectedly. Reconnecting...",
+                date: new Date().toString()
+            })
+            sendStateToControlPanelClient?.();
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 5 seconds before reconnecting
+            logEvent({
+                errorType: ErrorType.INFO,
+                description: "Reconnecting to RV6L...",
+                date: new Date().toString()
+            })
+            client.destroy(); // Destroy the current client connection
+            RV6L_STATE.globalMessageCounter = 0; // Reset the message counter
+            initRV6LClient(); // Reinitialize the RV6L client
+
+        });
+    }catch (e) {
         logEvent({
             errorType: ErrorType.WARNING,
-            description: "RV6L connection closed unexpectedly. Reconnecting...",
+            description: "Error initializing RV6L client: " + e,
             date: new Date().toString()
-        })
+        });
+
+        RV6L_STATE.rv6l_connected = false;
         sendStateToControlPanelClient?.();
         await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 5 seconds before reconnecting
         logEvent({
@@ -116,7 +138,7 @@ export function initRV6LClient() {
         RV6L_STATE.globalMessageCounter = 0; // Reset the message counter
         initRV6LClient(); // Reinitialize the RV6L client
 
-    });
+    }
 }
 
 

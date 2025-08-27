@@ -238,6 +238,7 @@ const CleanUp: GameState<boolean, void> = {
                 }
             }
         }
+
         resetGame();
 
         if (instantRestart) {

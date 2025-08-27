@@ -24,7 +24,7 @@ export default function Game(props: { sessionID: string, indoor: boolean }) {
     const {
         sendJsonMessage,
         readyState
-    } = useWebSocket("https://rv6l.tim-arnold.de/play?sessionID=" + props.sessionID, {
+    } = useWebSocket(`https://${process.env.NEXT_PUBLIC_BACKEND_URL}/play?sessionID=` + props.sessionID, {
         onOpen: () => console.log('opened'),
         onMessage: (message) => {
             console.log('message received', message);
