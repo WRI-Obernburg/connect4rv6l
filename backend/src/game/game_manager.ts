@@ -56,17 +56,7 @@ const PlayerSelect: GameState<void, number> = {
             GameManager.gameEvent.removeListener("stateChange", abortFunction);
 
             if (e instanceof PlayerSelectionAbortError) {
-                return {
-                    canContinue: false,
-                    subsequentState: null,
-                    output: -1
-                }
-            } else {
-                logEvent({
-                    errorType: ErrorType.WARNING,
-                    description: "Player selection timed out, resetting game.",
-                    date: new Date().toString()
-                });
+
                 GameManager.raiseError({
                     errorType: ErrorType.WARNING,
                     description: "Player selection timed out, resetting game.",
@@ -76,6 +66,17 @@ const PlayerSelect: GameState<void, number> = {
                     canContinue: true,
                     subsequentState: CleanUp,
                     output: 0 // Indicating that the game should start instantly
+                }
+            } else {
+                GameManager.raiseError({
+                    errorType: ErrorType.WARNING,
+                    description: "Unknown error during player selection",
+                    date: new Date().toString()
+                });
+                return {
+                    canContinue: false,
+                    subsequentState: null,
+                    output: -1
                 }
             }
 
