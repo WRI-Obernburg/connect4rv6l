@@ -13,7 +13,6 @@
     "@ampproject/remapping": "^2.3.0",
     "@tailwindcss/vite": "^4.1.11",
     "@types/bun": "^1.2.20",
-    "@types/uuidv4": "^5.0.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.535.0",
     "motion": "^12.23.12",
@@ -23,7 +22,7 @@
     "react-use-websocket": "^4.13.0",
     "tailwind-merge": "^3.3.1",
     "tailwindcss": "^4.1.11",
-    "uuidv4": "^6.2.13"
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",
