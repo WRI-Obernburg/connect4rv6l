@@ -115,7 +115,7 @@ function App() {
 
   return (
     <>
-      <Game gameState={state} qrCodeLink={qrCodeLink! + (indoor ? "&indoor" : "")}></Game>
+      <Game gameState={state} indoor={indoor} qrCodeLink={qrCodeLink! + (indoor ? "&indoor" : "")}></Game>
     </>
   )
 }
