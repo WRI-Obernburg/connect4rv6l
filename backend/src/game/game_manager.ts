@@ -62,22 +62,18 @@ const PlayerSelect: GameState<void, number> = {
                     description: "Player selection timed out, resetting game.",
                     date: new Date().toString()
                 });
-                return {
-                    canContinue: true,
-                    subsequentState: CleanUp,
-                    output: 0 // Indicating that the game should start instantly
-                }
             } else {
                 GameManager.raiseError({
                     errorType: ErrorType.WARNING,
                     description: "Unknown error during player selection",
                     date: new Date().toString()
                 });
-                return {
-                    canContinue: false,
-                    subsequentState: null,
-                    output: -1
-                }
+
+            }
+            return {
+                canContinue: true,
+                subsequentState: CleanUp,
+                output: 0 // Indicating that the game should not start instantly
             }
 
         }
