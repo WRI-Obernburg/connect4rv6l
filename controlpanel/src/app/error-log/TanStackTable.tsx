@@ -24,7 +24,7 @@ interface DataTableProps<TData, TValue> {
     data: TData[]
 }
 
-export function ErrorTable<TData, TValue>({
+export function TanStackTable<TData, TValue>({
                                               columns,
                                               data,
                                           }: DataTableProps<TData, TValue>) {

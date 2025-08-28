@@ -13,6 +13,8 @@ function App() {
   const [qrCodeLink, setQrCodeLink] = useState<string | null>(null);
   const [state, setState] = useState<GameState | null>(null);
   const indoor = useQueryParam('indoor') != null;
+  const [frontendID, setFrontendID] = useState<string>(window.localStorage.getItem("frontendID") ?? crypto.randomUUID());
+  const [identifyMode, setIdentifyMode] = useState<boolean>(false);
 
 
   const {
@@ -22,7 +24,7 @@ function App() {
     lastJsonMessage,
     readyState,
     getWebSocket,
-  } = useWebSocket(`ws://${(typeof window !== "undefined")?window.location.hostname:""}:4000/ws`, {
+  } = useWebSocket(`ws://${(typeof window !== "undefined")?window.location.hostname:""}:4000/ws?frontendID=${frontendID}${indoor?"&indoor=true":""}`, {
     onOpen: () => console.log('opened'),
     onClose: () => {
       setQrCodeLink(null);
@@ -34,12 +36,19 @@ function App() {
     onMessage: (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.qrCodeLink) {
-          setQrCodeLink(data.qrCodeLink);
+        if(data.action === "data") {
+            if (data.qrCodeLink) {
+                setQrCodeLink(data.qrCodeLink);
+            }
+            if (data.gameState) {
+                setState(data.gameState);
+            }
+        }else if(data.action === "identifyStart") {
+            setIdentifyMode(true);
+        }else if(data.action === "identifyEnd") {
+            setIdentifyMode(false);
         }
-        if (data.gameState) {
-          setState(data.gameState);
-        }
+
         console.log('Received message:', data);
       } catch (error) {
         console.error('Error parsing message:', error);
@@ -49,6 +58,7 @@ function App() {
   });
 
     useEffect(() => {
+        window.localStorage.setItem("frontendID", frontendID);
         setTimeout(()=>{
             // @ts-ignore
             window.location.reload(true);
@@ -58,6 +68,18 @@ function App() {
   if (readyState !== 1 || state === null) {
     return <div className='flex flex-row items-center justify-center gap-16 w-screen"'>
       <h1 className='text-8xl text-gray-500 font-bold'>Connecting...</h1>
+    </div>
+  }
+
+  if(identifyMode) {
+    return <div className='flex flex-col items-center justify-center gap-4 w-screen h-screen'>
+      <h1 className='text-8xl text-blue-500 font-bold'>Identify Display</h1>
+      <p className='text-gray-600 text-4xl font-bold'>{frontendID}</p>
+      <p className='text-gray-600 text-4xl'>Das Display ist im {indoor?"Indoor-":"Outdoor-"}Betrieb</p>
+        <p className={"text-gray-600 text-4xl"}>Daten:</p>
+        <div className={"max-h-[50vh] overflow-y-auto bg-gray-100 p-4 rounded-lg"}>
+            <pre className={"text-gray-600 text-2xl"}>{JSON.stringify(state, null, 2)}</pre>
+        </div>
     </div>
   }
 

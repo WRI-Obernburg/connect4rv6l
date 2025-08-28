@@ -20,6 +20,36 @@ export const playerDataStream = new stream.PassThrough();
 export let sendStateToClient: (() => void) | null = null;
 let previousSessionID = "";
 
+// Centralized player message handlers
+function handlePlayerMessage(parsedMSG: any) {
+    if (!parsedMSG?.type) return;
+
+    const handlers: Record<string, (payload: any) => void> = {
+        placeChip(payload) {
+            handlePlaceChip(payload);
+        },
+        startGame() {
+            GameManager.startNewGame();
+        },
+        setDifficulty(payload) {
+            if (payload.difficulty && ['easy', 'medium', 'hard'].includes(payload.difficulty)) {
+                state.lastUserInteraction = Date.now();
+                state.difficulty = payload.difficulty;
+                sendState();
+            } else {
+                logEvent({
+                    errorType: ErrorType.WARNING,
+                    description: `Invalid difficulty level provided: ${payload.difficulty}`,
+                    date: new Date().toString()
+                });
+            }
+        }
+    };
+
+    const handler = handlers[parsedMSG.type as keyof typeof handlers];
+    if (handler) handler(parsedMSG);
+}
+
 export function initServer() {
 
     initSession();
@@ -63,31 +93,7 @@ export function initServer() {
         ws.on('message', function (msg) {
             try {
                 const parsedMSG = JSON.parse(msg.toString());
-
-                if (!parsedMSG.type) return;
-
-                if (parsedMSG.type === "placeChip") {
-                    handlePlaceChip(parsedMSG);
-                }
-
-                if (parsedMSG.type === "startGame") {
-                    GameManager.startNewGame();
-                }
-
-                if (parsedMSG.type === "setDifficulty") {
-                    if (parsedMSG.difficulty && ['easy', 'medium', 'hard'].includes(parsedMSG.difficulty)) {
-                        state.lastUserInteraction = Date.now();
-                        state.difficulty = parsedMSG.difficulty;
-                        sendState();
-                    } else {
-                        logEvent({
-                            errorType: ErrorType.WARNING,
-                            description: `Invalid difficulty level provided: ${parsedMSG.difficulty}`,
-                            date: new Date().toString()
-                        });
-                    }
-                }
-
+                handlePlayerMessage(parsedMSG);
             } catch (e) {
                 logEvent({
                     errorType: ErrorType.WARNING,
@@ -129,4 +135,3 @@ function handlePlaceChip(parsedMSG: any) {
         })
     }
 }
-

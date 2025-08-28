@@ -1,6 +1,6 @@
 "use client";
 import {Card, CardContent, CardFooter, CardHeader, CardTitle} from "@/components/ui/card";
-import {ErrorTable} from "@/app/error-log/ErrorTable";
+import {TanStackTable} from "@/app/error-log/TanStackTable";
 import {useContext} from "react";
 import {GameDataContext} from "@/provider/WebsocketProvider";
 import {columns} from "@/app/error-log/columns";
@@ -20,7 +20,7 @@ export default function ErrorLogPage() {
             </CardHeader>
             <CardContent>
                 {
-                    <ErrorTable columns={columns} data={gameDataContext!.errors}></ErrorTable>
+                    <TanStackTable columns={columns} data={gameDataContext!.errors}></TanStackTable>
                 }
 
             </CardContent>

@@ -34,7 +34,6 @@ export default function ManualControlPage() {
                 <p>MSG-Counter: {gameDataContext!.rv6l.messageCounter}</p>
                 <p>Übrige Chips Rot: {gameDataContext!.rv6l.redChipsLeft} Blau: {gameDataContext!.rv6l.blueChipsLeft}</p>
                 <p className={"text-red-500"}>{gameDataContext!.rv6l.mock && "RV6L Verbindung wird gemockt!"}</p>
-
             </CardHeader>
             <CardContent>
                 <div className={"flex flex-col justify-center items-center gap-4"}>
