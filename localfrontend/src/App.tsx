@@ -8,12 +8,13 @@ import Game from './components/Game';
 import { useQueryParam } from './lib/utils';
 import { useEffect } from 'react';
 import sleeping from "./assets/sleeping_rv6l.png";
+import {uuid} from 'uuidv4';
 
 function App() {
   const [qrCodeLink, setQrCodeLink] = useState<string | null>(null);
   const [state, setState] = useState<GameState | null>(null);
   const indoor = useQueryParam('indoor') != null;
-  const [frontendID, setFrontendID] = useState<string>(window.localStorage.getItem("frontendID") ?? crypto.randomUUID());
+  const [frontendID, setFrontendID] = useState<string>(window.localStorage.getItem("frontendID") ?? uuid());
   const [identifyMode, setIdentifyMode] = useState<boolean>(false);
 
 
