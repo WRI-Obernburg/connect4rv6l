@@ -108,6 +108,8 @@ export async function initRV6LClient() {
                 description: "RV6L connection closed unexpectedly. Reconnecting...",
                 date: new Date().toString()
             })
+            client.destroy(); // Destroy the current client connection
+            client.removeAllListeners(); // Remove all listeners to avoid duplicate events
             sendStateToControlPanelClient?.();
             await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 5 seconds before reconnecting
             logEvent({
@@ -115,7 +117,7 @@ export async function initRV6LClient() {
                 description: "Reconnecting to RV6L...",
                 date: new Date().toString()
             })
-            client.destroy(); // Destroy the current client connection
+
             RV6L_STATE.globalMessageCounter = 0; // Reset the message counter
             initRV6LClient(); // Reinitialize the RV6L client
 
@@ -126,23 +128,8 @@ export async function initRV6LClient() {
         });
 
     }catch (e) {
-        logEvent({
-            errorType: ErrorType.WARNING,
-            description: "Error initializing RV6L client: " + e,
-            date: new Date().toString()
-        });
 
-        RV6L_STATE.rv6l_connected = false;
-        sendStateToControlPanelClient?.();
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 5 seconds before reconnecting
-        logEvent({
-            errorType: ErrorType.INFO,
-            description: "Reconnecting to RV6L...",
-            date: new Date().toString()
-        })
-        client.destroy(); // Destroy the current client connection
-        RV6L_STATE.globalMessageCounter = 0; // Reset the message counter
-        initRV6LClient(); // Reinitialize the RV6L client
+        //ignore error cause close event will be triggered
 
     }
 }
