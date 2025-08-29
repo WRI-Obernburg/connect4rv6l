@@ -101,6 +101,7 @@ export async function initRV6LClient() {
         });
 
         client.on('close', async function () {
+
             RV6L_STATE.rv6l_connected = false;
             logEvent({
                 errorType: ErrorType.WARNING,
@@ -119,6 +120,11 @@ export async function initRV6LClient() {
             initRV6LClient(); // Reinitialize the RV6L client
 
         });
+
+        client.on("error",async (err) => {
+            //ignore error cause close event will be triggered
+        });
+
     }catch (e) {
         logEvent({
             errorType: ErrorType.WARNING,
