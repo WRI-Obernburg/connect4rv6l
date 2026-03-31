@@ -16,7 +16,7 @@ export let RV6L_STATE = {
     state: "IDLE",
     blueChipsLeft: 21,
     redChipsLeft: 21,
-    mock: true,
+    mock: false,
     actionStartTime: new Date().toString()
 }
 
