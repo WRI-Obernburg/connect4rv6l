@@ -5,8 +5,9 @@ import cors from 'cors';
 import {initSession, sessionState} from "./session";
 import {sendStateToControlPanelClient, sendStateToInternalClient} from "./internal_server";
 import stream from "stream";
-import {GameManager} from "./game/game_manager.ts";
+import {GameManager, gameStates} from "./game/game_manager.ts";
 import {ErrorType, logEvent} from "./errorHandler/error_handler.ts";
+import { game } from "./game/game.ts";
 
 const port = 3000
 
@@ -123,6 +124,17 @@ export function initServer() {
 
 function handlePlaceChip(parsedMSG: any) {
     if (parsedMSG.slot != null && !isNaN(parsedMSG.slot) && parsedMSG.slot >= 0 && parsedMSG.slot < 7) {
+        
+        //check if the slot isn't already full
+        if(game.board[parsedMSG.slot].length > 6) {
+            logEvent({
+                errorType: ErrorType.WARNING,
+                description: `Player attempted to place chip in full column: ${parsedMSG.slot}`,
+                date: new Date().toString()
+            });
+            return;
+        }
+
         playerDataStream.write(JSON.stringify({
             slot: parsedMSG.slot,
             type: "placeChip"

@@ -16,7 +16,7 @@ export let RV6L_STATE = {
     state: "IDLE",
     blueChipsLeft: 21,
     redChipsLeft: 21,
-    mock: false,
+    mock: true,
     actionStartTime: new Date().toString()
 }
 
@@ -360,6 +360,12 @@ async function waitForVariablePolling(variable: string, value: string) {
             } catch (error) {
                 cancel();
                 reject();
+                //log error
+                logEvent({
+                    errorType: ErrorType.FATAL,
+                    description: `Error while polling variable ${variable}: ${error}`,
+                    date: new Date().toString()
+                });
             }
 
         }
