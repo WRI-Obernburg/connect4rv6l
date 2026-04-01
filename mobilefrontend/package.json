@@ -18,7 +18,7 @@
     "fast-xml-parser": "^5.2.5",
     "lucide-react": "^0.539.0",
     "motion": "^12.23.11",
-    "next": "15.4.5",
+    "next": "15.4.10",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-use-websocket": "^4.13.0",
