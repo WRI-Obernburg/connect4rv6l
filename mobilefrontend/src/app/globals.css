@@ -6,8 +6,15 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-manrope);
   --font-mono: var(--font-geist-mono);
+  /* Walter Reis Institut corporate colours (wri-obernburg.de) */
+  --color-wri-cyan: #00addc;
+  --color-wri-cyan-dark: #0092bb;
+  --color-wri-petrol: #0d4453;
+  --color-wri-petrol-dark: #02171c;
+  --color-wri-light: #edf4f5;
+  --color-wri-grey: #565655;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -44,79 +51,84 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --radius: 0.875rem;
+  --background: #edf4f5;
+  --foreground: #0d4453;
+  --card: #ffffff;
+  --card-foreground: #0d4453;
+  --popover: #ffffff;
+  --popover-foreground: #0d4453;
+  --primary: #0d4453;
+  --primary-foreground: #ffffff;
+  --secondary: #ffffff;
+  --secondary-foreground: #0d4453;
+  --muted: #dfe9ec;
+  --muted-foreground: #565655;
+  --accent: #d6f1f9;
+  --accent-foreground: #0d4453;
+  --destructive: #ac0042;
+  --border: #c9d8dc;
+  --input: #c9d8dc;
+  --ring: #00addc;
+  --chart-1: #00addc;
+  --chart-2: #0d4453;
+  --chart-3: #565655;
+  --chart-4: #ac0042;
+  --chart-5: #edf4f5;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0d4453;
+  --sidebar-primary: #00addc;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #d6f1f9;
+  --sidebar-accent-foreground: #0d4453;
+  --sidebar-border: #c5d6db;
+  --sidebar-ring: #00addc;
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-}
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans min-h-screen;
   }
+  h1, h2, h3 {
+    @apply font-extrabold tracking-[-0.02em];
+  }
+}
+
+/* --- WRI look: light surface, petrol/cyan band on top, one frosted panel on its edge --- */
+@utility bg-wri-band {
+  background-image: linear-gradient(144deg, #0d4453 0%, #14627a 45%, #2f8fb8 78%, #3fa7d3 100%);
+}
+@utility bg-blueprint {
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.06) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+@utility panel {
+  background-color: rgb(255 255 255 / 0.8);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid rgb(255 255 255 / 0.9);
+  box-shadow: 0 30px 60px -28px rgb(13 68 83 / 0.5), 0 1px 0 rgb(255 255 255 / 0.9) inset;
+}
+@utility board {
+  background-color: #0d4453;
+  background-image: linear-gradient(180deg, #145466 0%, #0d4453 100%);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.18) inset, 0 24px 40px -22px rgb(13 68 83 / 0.7);
+}
+@utility hole {
+  background-color: #e6eef0;
+  box-shadow: 0 3px 6px rgb(0 0 0 / 0.35) inset, 0 -1px 0 rgb(255 255 255 / 0.5) inset;
+}
+@utility chip-red {
+  background-image: radial-gradient(circle at 35% 30%, #ff8a7c 0%, #e2372f 45%, #a81f19 100%);
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.35), 0 1px 0 rgb(255 255 255 / 0.4) inset;
+}
+@utility chip-blue {
+  background-image: radial-gradient(circle at 35% 30%, #8db7ff 0%, #2f6fe2 45%, #1a47a3 100%);
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.35), 0 1px 0 rgb(255 255 255 / 0.4) inset;
 }

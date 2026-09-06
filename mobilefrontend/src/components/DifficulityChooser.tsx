@@ -1,20 +1,22 @@
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { GameState } from "@/interface/GameState"
+import { cn } from "@/lib/utils"
+
+const LEVELS = [
+    { value: "easy", label: "Leicht" },
+    { value: "medium", label: "Mittel" },
+    { value: "hard", label: "Schwer" },
+];
+
 export default function DifficultyChooser(props: {onDifficultyChange: (difficulty: string)=>void, gameState: GameState}) {
-    return <Select onValueChange={props.onDifficultyChange} value={props.gameState.difficulty}>
-        <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Schwierigkeit" />
-        </SelectTrigger>
-        <SelectContent>
-            <SelectItem value="easy">Leicht</SelectItem>
-            <SelectItem value="medium">Mittel</SelectItem>
-            <SelectItem value="hard">Schwer</SelectItem>
-        </SelectContent>
-    </Select>
+    return <div role="radiogroup" aria-label="Schwierigkeit" className="inline-flex rounded-lg border border-wri-petrol/15 bg-white/60 p-0.5">
+        {LEVELS.map(level => {
+            const active = props.gameState.difficulty === level.value;
+            return <button key={level.value} type="button" role="radio" aria-checked={active}
+                onClick={() => props.onDifficultyChange(level.value)}
+                className={cn("px-3.5 h-9 rounded-md text-sm font-semibold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-wri-cyan",
+                    active ? "bg-wri-petrol text-white" : "text-wri-petrol/70 hover:text-wri-petrol")}>
+                {level.label}
+            </button>
+        })}
+    </div>
 }

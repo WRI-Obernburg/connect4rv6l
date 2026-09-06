@@ -1,6 +1,5 @@
 "use client";
 import { cn } from "../lib/utils";
-import { MoveDown } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 type GameFieldProps = {
   board: Dict<number[]> | null,
@@ -10,30 +9,11 @@ type GameFieldProps = {
   onColumnClick?: (columnIndex: number) => void;
 };
 
-function RenderMoveIndicators({ playerTurn, onColumnClick, board }: { playerTurn: boolean; onColumnClick: (col: number) => void, board: Dict<number[]> }) {
-  if (!playerTurn) return <div className="h-10" />;
-  return (
-    <div className="flex flex-row gap-2 justify-center">
-      {Array.from({ length: 7 }).map((_, colIdx) => {
-              if (board != null && board[colIdx] != null && board[colIdx].length >= 6) {
-                  return <div key={colIdx} className="w-10 h-10"/>;
-              } else {
-                  return <MoveDown
-                      key={colIdx}
-                      className="w-10 h-10 p-1 text-red-500 hover:bg-gray-300 active:bg-gray-300 rounded cursor-pointer"
-                      onClick={() => onColumnClick(colIdx)}
-                  />
-              }
-          }
-
-      )}
-    </div>
-  );
-}
-
 function RenderCell({ entryState, highlight, xl }: { entryState: number | null; highlight?: boolean, xl:boolean }) {
+  const size = xl ? "w-20 h-20" : "w-10 h-10";
   return (
-    <div className="relative">
+    <div className={cn("relative", size)}>
+      <div className={cn(size, "rounded-full hole")} />
       {entryState != null && (
         <motion.div
           initial={{ opacity: 0, y: -100 }}
@@ -41,21 +21,12 @@ function RenderCell({ entryState, highlight, xl }: { entryState: number | null; 
           exit={{ opacity: 0, y: -20 }}
           transition={{ duration: 0.4, type: "spring", bounce: 0.3 }}
           className={cn(
-            xl?"w-20 h-20":"w-10 h-10", "border absolute rounded-full",
-            entryState === 1
-              ? "bg-red-500"
-              : entryState === 2
-              ? "bg-blue-500"
-              : "bg-gray-200",
-            highlight && entryState === 2 && "shadow-blue-500 shadow-xl",
-            highlight && entryState === 1 && "shadow-red-500 shadow-xl"
+            size, "absolute inset-0 rounded-full",
+            entryState === 1 ? "chip-red" : entryState === 2 ? "chip-blue" : "",
+            highlight && "ring-[3px] ring-white"
           )}
         />
       )}
-      <div
-        className={cn(
-          xl?"w-20 h-20":"w-10 h-10", "border rounded-full border-gray-500 shadow hover:shadow-lg transition-shadow flex items-center justify-center",        )}
-      />
     </div>
   );
 }
@@ -89,34 +60,51 @@ function getWinningCells(board: Dict<number[]> | null): [number, number][] | nul
   return null;
 }
 
+/**
+ * The board is rendered as a physical object: petrol frame, recessed holes, glossy chips.
+ * In interactive mode every column is one tap target; a cyan marker above the column
+ * shows where a chip can still be dropped.
+ */
 export function GameField(props: GameFieldProps) {
-  // board: [column][row], but we want to render as [col][row] with bottom at index 0
   const winningCells = getWinningCells(props.board);
+  const canPlay = props.interactive && !!props.isPlayerTurn;
+  const gap = props.xl ? "gap-4" : "gap-2";
+
   return (
-    <div className="flex flex-col gap-4 justify-center w-fit self-center">
-     {
-        props.interactive &&
-        <RenderMoveIndicators
-        playerTurn={props.isPlayerTurn!}
-        onColumnClick={props.onColumnClick!}
-        board={props.board!}
-      />
-      }
-      <div className={cn("flex flex-row justify-center rounded-lg border-gray-300", props.xl?"p-4 border-2 gap-4":"p-2 border gap-2")}>
-      {Array.from({ length: 7 }).map((_, colIdx) => (
-        <div key={colIdx} className={cn("flex flex-col", props.xl?"gap-4":"gap-2")}>
-          <AnimatePresence>
-            {Array.from({ length: 6 }).map((_, rowIdx) => {
-              const boardRowIdx = 5 - rowIdx;
-              const entryState = props.board ? props.board[colIdx]![boardRowIdx] : null;
-              const highlight =
-                winningCells?.some(([c, r]) => c === colIdx && r === boardRowIdx) ?? false;
-              return <RenderCell key={rowIdx} entryState={entryState!} highlight={highlight} xl={props.xl} />;
-            })}
-          </AnimatePresence>
-        </div>
-      ))}
-    </div>
+    <div className="flex flex-col justify-center w-fit self-center">
+      <div className={cn("flex flex-row justify-center board", props.xl ? "p-6 rounded-3xl gap-4" : "p-2.5 rounded-2xl gap-2")}>
+        {Array.from({ length: 7 }).map((_, colIdx) => {
+          const full = props.board != null && props.board[colIdx] != null && props.board[colIdx]!.length >= 6;
+          const clickable = canPlay && !full;
+          return (
+            <button
+              key={colIdx}
+              type="button"
+              disabled={!clickable}
+              aria-label={`Spalte ${colIdx + 1}`}
+              onClick={() => props.onColumnClick?.(colIdx)}
+              className={cn("relative flex flex-col rounded-full outline-none", gap,
+                props.interactive && "transition-colors",
+                clickable && "cursor-pointer hover:bg-white/10 active:bg-white/15 focus-visible:ring-2 focus-visible:ring-wri-cyan")}
+            >
+              {props.interactive && (
+                <span aria-hidden className={cn("absolute left-1/2 -translate-x-1/2 rounded-full bg-wri-cyan transition-opacity",
+                  props.xl ? "-top-4 w-3 h-3" : "-top-2 w-1.5 h-1.5",
+                  clickable ? "opacity-100" : "opacity-0")} />
+              )}
+              <AnimatePresence>
+                {Array.from({ length: 6 }).map((_, rowIdx) => {
+                  const boardRowIdx = 5 - rowIdx;
+                  const entryState = props.board ? props.board[colIdx]![boardRowIdx] : null;
+                  const highlight =
+                    winningCells?.some(([c, r]) => c === colIdx && r === boardRowIdx) ?? false;
+                  return <RenderCell key={rowIdx} entryState={entryState!} highlight={highlight} xl={props.xl} />;
+                })}
+              </AnimatePresence>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

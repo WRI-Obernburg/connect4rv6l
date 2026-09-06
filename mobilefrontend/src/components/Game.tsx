@@ -63,54 +63,37 @@ export default function Game(props: { sessionID: string, indoor: boolean }) {
 
 
     if (!isSessionIDValid) {
-        return <div className="flex flex-col gap-4 justify-center mt-4">
-            <div className="text-center font-bold">Scanne den QR-Code um ein Spiel zu starten</div>
-            <div className="text-red-500 text-center font-bold">
-                Spiel ID ist abgelaufen
-            </div>
-        </div>
+        return <Panel title="Dieses Spiel ist abgelaufen" text="Scanne den QR-Code am Spieltisch, um ein neues Spiel zu starten." />
     }
 
     if(readyState !== 1) {
-        return <div className="flex flex-col gap-4 justify-center mt-4">
-            <div className="text-center">Verbinde zum Server...</div>
-        </div>
+        return <Panel title="Verbindung wird aufgebaut" text="Einen Moment." />
     }
 
     if (!gameState) {
-        return <div className="flex flex-col gap-4 justify-center mt-4">
-            <div className="text-center">Warte auf Spielstatus...</div>
-        </div>
+        return <Panel title="Spielstand wird geladen" text="Einen Moment." />
     }
 
     if(gameState.stateName === "ERROR") {
-        return <div className="flex flex-col gap-4 justify-center mt-4">
-            <div className="text-center text-2xl font-bold text-red-500">Das System ist zur Zeit außer Betrieb</div>
-        </div>
+        return <Panel title="Der Roboter macht Pause" text="Das System ist gerade außer Betrieb. Bitte versuche es später noch einmal." />
     }
 
     if(gameState.stateName === "SLEEP") {
-        return <div className="flex flex-col gap-4 justify-center mt-4">
-        <div className="text-center text-xl font-bold text-slate-700">Der Roboter schläft schon. Aber morgen ist er wieder für eine Herausforderung bereit!</div>
-    </div>
+        return <Panel title="Der Roboter schläft" text="Morgen ist er wieder bereit für eine Partie." />
     }
 
     if (gameState.stateName === "IDLE") {
-        return <div className="flex flex-col gap-4 justify-center self-center w-fit mt-4">
-            <div className="text-center text-2xl font-bold">Spiel ist noch nicht gestartet</div>
+        return <Panel title="Bereit für eine Partie?" text="Du spielst Blau, der Roboter spielt Rot. Vier in einer Reihe gewinnen.">
             <StartGame gameState={gameState.stateName} onGameStart={() => {
                 sendJsonMessage({
                     type: "startGame",
                 });
             }} />
-        </div>
+        </Panel>
     }
 
     if (gameState.stateName === "CLEAN_UP") {
-        return <div className="flex flex-col gap-4 justify-center mt-4">
-            <div className="text-center text-2xl font-bold">Das Spielfeld wird geleert...</div>
-            <div className="text-center">Bitte warte einen Moment</div>
-        </div>
+        return <Panel title="Das Spielfeld wird geleert" text="Der Roboter räumt die Chips zurück. Das dauert einen Moment." />
     }
 
     let gameBoard = gameState.board;
@@ -127,51 +110,48 @@ export default function Game(props: { sessionID: string, indoor: boolean }) {
         };
     }
 
-    return <div className="flex flex-col gap-4 justify-center mt-4 items-center">
+    const isPlayerTurn = gameState.stateName === "PLAYER_SELECTION";
+
+    return <div className="panel rounded-2xl p-4 mt-8 flex flex-col gap-4">
         <CurrentAction gameState={gameState} />
 
-        <GameField board={gameBoard} interactive={true} xl={false} onColumnClick={handleColumnClick} isPlayerTurn={gameState.stateName === "PLAYER_SELECTION"} />
-        <DifficultyChooser gameState={gameState} onDifficultyChange={handleDifficultyChange} ></DifficultyChooser>
+        <GameField board={gameBoard} interactive={true} xl={false} onColumnClick={handleColumnClick} isPlayerTurn={isPlayerTurn} />
 
-        <StartGame onGameStart={() => {
-            sendJsonMessage({
-                type: "startGame",
-            });
-        }} gameState={gameState.stateName} />
-
+        <div className="flex items-center justify-between gap-3 pt-1">
+            <DifficultyChooser gameState={gameState} onDifficultyChange={handleDifficultyChange} ></DifficultyChooser>
+            <StartGame onGameStart={() => {
+                sendJsonMessage({
+                    type: "startGame",
+                });
+            }} gameState={gameState.stateName} />
+        </div>
     </div>
 
 }
 
+function Panel(props: { title: string, text: string, children?: React.ReactNode }) {
+    return <div className="panel rounded-2xl p-6 mt-8 flex flex-col gap-2">
+        <p className="text-2xl font-extrabold tracking-[-0.02em] leading-tight">{props.title}</p>
+        <p className="text-wri-grey">{props.text}</p>
+        {props.children && <div className="mt-3">{props.children}</div>}
+    </div>
+}
+
 function CurrentAction(props: { gameState: GameState }) {
+    const s = props.gameState.stateName;
+    let title = "", hint = "", accent = false;
 
+    if (s === "ROBOT_WIN") { title = "Der Roboter gewinnt."; hint = "Revanche? Starte einfach eine neue Partie."; }
+    else if (s === "PLAYER_WIN") { title = "Du hast gewonnen!"; hint = "Vier in einer Reihe. Der Roboter räumt gleich auf."; accent = true; }
+    else if (s === "TIE") { title = "Unentschieden."; hint = "Das Feld ist voll. Noch eine Runde?"; }
+    else if (["GRAP_BLUE_CHIP", "PLACE_BLUE_CHIP"].includes(s)) { title = "Der Roboter setzt deinen Chip"; hint = "Schau auf das Spielfeld."; }
+    else if (["ROBOT_SELECTION", "GRAP_RED_CHIP", "PLACE_RED_CHIP"].includes(s)) { title = "Der Roboter überlegt"; hint = "Gleich ist er dran."; }
+    else if (s === "PLAYER_SELECTION") { title = "Du bist am Zug"; hint = "Tippe auf die Spalte, in die dein Chip fallen soll."; accent = true; }
 
-    if (props.gameState.stateName === "ROBOT_WIN") {
-        return <div className="text-center text-2xl font-bold">Der Roboter hat gewonnen!</div>
-    }
-
-    if (props.gameState.stateName === "PLAYER_WIN") {
-        return <div className="text-center text-2xl font-bold">Du hast gewonnen!</div>
-    }
-
-    if (props.gameState.stateName === "TIE") {
-        return <div className="text-center text-2xl font-bold">Das Spiel endet unentschieden!</div>
-    }
-
-    if (["GRAP_BLUE_CHIP", "PLACE_BLUE_CHIP"].includes(props.gameState.stateName)) {
-        return <div className="text-center text-2xl font-bold">Der Roboter setzt deinen Chip...</div>
-    }
-
-    if (["ROBOT_SELECTION", "GRAP_RED_CHIP", "PLACE_RED_CHIP"].includes(props.gameState.stateName)) {
-        return <div className="text-center text-2xl font-bold">Der Roboter ist am Zug...</div>
-    }
-
-    if (props.gameState.stateName === "PLAYER_SELECTION") {
-        return <div className="text-center text-2xl font-bold">Du bist am Zug!</div>
-    }
-
-
-
+    return <div className="px-1">
+        <p className={`text-2xl font-extrabold tracking-[-0.02em] leading-tight ${accent ? "text-wri-cyan-dark" : ""}`}>{title}</p>
+        <p className="text-wri-grey text-sm mt-0.5">{hint}</p>
+    </div>
 }
 
 
@@ -183,28 +163,24 @@ function StartGame(props: { onGameStart: () => void, gameState: string }) {
     if (props.gameState != "IDLE") {
         return <AlertDialog>
             <AlertDialogTrigger asChild>
-                <Button disabled={!isRestartable} className="bg-green-600 text-white px-4 py-2 w-fit self-center rounded cursor-pointer">
-                    Spiel neustarten
-                </Button>
+                <Button disabled={!isRestartable} variant="ghost" className="text-wri-petrol/80 hover:text-wri-petrol hover:bg-wri-petrol/5 font-bold px-3 rounded-lg">Neu starten</Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
                 <AlertDialogHeader>
-                    <AlertDialogTitle>Spiel beenden?</AlertDialogTitle>
+                    <AlertDialogTitle>Neue Partie starten?</AlertDialogTitle>
                     <AlertDialogDescription>
-                        Bist du sicher, dass du das Spiel neustarten möchtest? Alle Fortschritte gehen verloren.
+                        Die laufende Partie wird abgebrochen und das Spielfeld geleert.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                    <AlertDialogAction onClick={props.onGameStart}>Ja, Spiel beenden</AlertDialogAction>
+                    <AlertDialogAction onClick={props.onGameStart}>Neue Partie</AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
     } else {
 
-        return <Button disabled={!isRestartable} onClick={props.onGameStart} className="bg-green-600 text-white px-4 py-2 w-fit self-center rounded cursor-pointer">
-            Spiel starten
-        </Button>
+        return <Button disabled={!isRestartable} onClick={props.onGameStart} size="lg" className="h-12 px-7 rounded-lg font-extrabold text-base">Spiel starten</Button>
 
 
     }

@@ -8,6 +8,7 @@ import Game from './components/Game';
 import { useQueryParam } from './lib/utils';
 import { useEffect } from 'react';
 import sleeping from "./assets/sleeping_rv6l.png";
+import Layout from './components/Layout';
 import { v4 as uuidv4 } from 'uuid';
 
 
@@ -68,55 +69,57 @@ function App() {
     }, []);
 
   if (readyState !== 1 || state === null) {
-    return <div className='flex flex-row items-center justify-center gap-16 w-screen"'>
-      <h1 className='text-8xl text-gray-500 font-bold'>Connecting...</h1>
-    </div>
+    return <Layout>
+      <h1 className='text-6xl font-extrabold text-white'>Verbindung wird aufgebaut</h1>
+    </Layout>
   }
 
   if(identifyMode) {
-    return <div className='flex flex-col items-center justify-center gap-4 w-screen h-screen'>
-      <h1 className='text-8xl text-blue-500 font-bold'>Identify Display</h1>
-      <p className='text-gray-600 text-4xl font-bold'>{frontendID}</p>
-      <p className='text-gray-600 text-4xl'>Das Display ist im {indoor?"Indoor-":"Outdoor-"}Betrieb</p>
-        <p className={"text-gray-600 text-4xl"}>Daten:</p>
-        <div className={"max-h-[50vh] overflow-y-auto bg-gray-100 p-4 rounded-lg"}>
-            <pre className={"text-gray-600 text-2xl"}>{JSON.stringify(state, null, 2)}</pre>
+    return <Layout>
+      <div className='panel rounded-3xl p-12 flex flex-col items-center justify-center gap-3'>
+        <h1 className='text-7xl font-extrabold'>Dieses Display</h1>
+        <p className='text-4xl font-semibold'>{frontendID}</p>
+        <p className='text-wri-grey text-3xl'>{indoor?"Indoor":"Outdoor"}-Betrieb</p>
+        <div className='max-h-[40vh] overflow-y-auto bg-white rounded-xl p-4 mt-2'>
+          <pre className='text-wri-grey text-xl'>{JSON.stringify(state, null, 2)}</pre>
         </div>
-    </div>
+      </div>
+    </Layout>
   }
 
   if (state.stateName === "ERROR") {
-    return <div className='flex flex-col items-center justify-center gap-4 w-screen h-screen'>
-      <h1 className='text-8xl text-red-500 font-bold'>Fehler</h1>
-      <p className='text-gray-600 text-4xl font-bold'>Aktuell ist das System außer Betrieb.</p>
-      <p className='text-gray-600 text-3xl'>Bitte versuche es später erneut</p>
-    </div>
+    return <Layout>
+      <div className='panel rounded-3xl p-14 flex flex-col justify-center gap-4 max-w-[60vw]'>
+        <h1 className='text-7xl font-extrabold leading-[1.02]'>Der Roboter macht Pause.</h1>
+        <p className='text-wri-grey text-3xl'>Das System ist gerade außer Betrieb. Bitte versuche es später noch einmal.</p>
+      </div>
+    </Layout>
   }
 
   if (state.stateName === "SLEEP") {
-    return <div className="flex flex-row items-center justify-center gap-16 w-screen">
-
-
-      <img src={sleeping} className="h-[40rem] w-auto" />
-
-      <div>
-        <p className="text-gray-600 text-7xl font-bold">RV6L-Gewinnt</p>
-        <p className="text-4xl text-gray-500 max-w-[40vw] mt-2">
-          Pssst! Der Roboter schläft gerade. Schau gerne morgen wieder vorbei!
-        </p>
-
+    return <Layout>
+      <div className="flex flex-row items-stretch justify-center gap-10">
+        <div className="panel rounded-3xl p-6 flex items-center"><img src={sleeping} className="h-[30rem] w-auto rounded-2xl" /></div>
+        <div className="panel rounded-3xl p-12 max-w-[42vw] flex flex-col justify-center">
+          <p className="text-7xl font-extrabold leading-[1.02]">Der Roboter schläft.</p>
+          <p className="text-3xl text-wri-grey mt-6">
+            Morgen ist er wieder bereit für eine Partie.
+          </p>
+        </div>
       </div>
-    </div>
+    </Layout>
   }
 
   if (!state.isPlayerConnected || (state.stateName === "IDLE")) {
-    return <QRCodeComponent qrCodeLink={qrCodeLink + (indoor ? "&indoor" : "")} isGameRunning={state.stateName !== "IDLE"} />
+    return <Layout>
+      <QRCodeComponent qrCodeLink={qrCodeLink + (indoor ? "&indoor" : "")} isGameRunning={state.stateName !== "IDLE"} />
+    </Layout>
   }
 
   return (
-    <>
+    <Layout>
       <Game gameState={state} indoor={indoor} qrCodeLink={qrCodeLink! + (indoor ? "&indoor" : "")}></Game>
-    </>
+    </Layout>
   )
 }
 

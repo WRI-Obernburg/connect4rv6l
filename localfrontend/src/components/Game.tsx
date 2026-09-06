@@ -17,63 +17,46 @@ export default function Game(props: { gameState: GameState, qrCodeLink: string, 
             6: gameBoard[0],
         };
     }
-    return <div className="flex flex-row justify-center gap-16 items-center">
-        <div className="flex flex-col justify-center gap-16">
-            <div className="text-7xl text-gray-600">
+    const gameOver = ["TIE", "PLAYER_WIN", "ROBOT_WIN"].includes(props.gameState.stateName);
+
+    return <div className="flex flex-row justify-center items-stretch gap-10">
+        <div className="panel rounded-3xl p-8 flex items-center">
+            <GameField board={gameBoard} interactive={false} xl={true}></GameField>
+        </div>
+        <div className="panel rounded-3xl p-12 w-[40vw] flex flex-col justify-between">
+            <div>
                 <CurrentAction gameState={props.gameState}></CurrentAction>
             </div>
-            <GameField board={gameBoard} interactive={false} xl={true}></GameField>
-            <p className="font-bold self-center text-gray-600 text-4xl inline">Schwierigkeitsgrad: <DisplayDifficulty difficulty={props.gameState.difficulty}/></p>
-
+            {gameOver
+                ? <div className="flex items-center gap-8 mt-8">
+                    <div className="bg-white rounded-2xl p-4"><QRCode value={props.qrCodeLink} fgColor="#0d4453" bgColor="transparent" size={200}></QRCode></div>
+                    <p className="text-3xl font-semibold leading-tight max-w-[14ch]">Revanche? Code scannen und neu starten.</p>
+                  </div>
+                : <p className="text-2xl text-wri-grey mt-8">Schwierigkeit: <DisplayDifficulty difficulty={props.gameState.difficulty}/></p>}
         </div>
-        {
-            ["TIE", "PLAYER_WIN", "ROBOT_WIN"].includes(props.gameState.stateName) && <div className="flex flex-col justify-center gap-4 items-center">
-                <div className="text-4xl font-bold text-gray-500">Revanche?</div>
-                <QRCode value={props.qrCodeLink}></QRCode>
-            </div>
-        }
     </div>
 }
 
 
 function CurrentAction(props: { gameState: GameState }) {
+    const s = props.gameState.stateName;
+    let title = "", hint = "", accent = false;
 
-    if(props.gameState.stateName === "CLEAN_UP") {
-        return <div className="text-center font-bold">Das Spielfeld wird geleert...</div>
-    }
+    if (s === "CLEAN_UP") { title = "Das Spielfeld wird geleert."; hint = "Der Roboter räumt die Chips zurück."; }
+    else if (s === "ROBOT_WIN") { title = "Der Roboter gewinnt."; hint = "Vier in einer Reihe für Rot."; }
+    else if (s === "PLAYER_WIN") { title = "Gewonnen!"; hint = "Vier in einer Reihe für Blau."; accent = true; }
+    else if (s === "TIE") { title = "Unentschieden."; hint = "Das Feld ist voll."; }
+    else if (["GRAP_BLUE_CHIP", "PLACE_BLUE_CHIP"].includes(s)) { title = "Der Roboter setzt den blauen Chip."; hint = "Bitte nicht in den Arbeitsbereich greifen."; }
+    else if (["ROBOT_SELECTION", "GRAP_RED_CHIP", "PLACE_RED_CHIP"].includes(s)) { title = "Der Roboter ist am Zug."; hint = "Er überlegt und setzt Rot."; }
+    else if (s === "PLAYER_SELECTION") { title = "Du bist am Zug."; hint = "Wähle die Spalte auf deinem Handy."; accent = true; }
 
-    if (props.gameState.stateName === "ROBOT_WIN") {
-        return <div className="text-center  font-bold">Der Roboter hat gewonnen!</div>
-    }
-
-    if (props.gameState.stateName === "PLAYER_WIN") {
-        return <div className="text-center  font-bold">Du hast gewonnen!</div>
-    }
-
-    if(props.gameState.stateName === "TIE") {
-        return <div className="text-center  font-bold">Unentschieden!</div>
-    }
-
-    if (["GRAP_BLUE_CHIP", "PLACE_BLUE_CHIP"].includes(props.gameState.stateName)) {
-        return <div className="text-center  font-bold">Der Roboter setzt deinen Chip...</div>
-    }
-
-    if (["ROBOT_SELECTION", "GRAP_RED_CHIP", "PLACE_RED_CHIP"].includes(props.gameState.stateName)) {
-        return <div className="text-center  font-bold">Der Roboter ist am Zug...</div>
-    }
-
-    if (props.gameState.stateName === "PLAYER_SELECTION") {
-        return <div className="text-center  font-bold">Du bist am Zug!</div>
-    }
-
+    return <>
+        <p className={`text-7xl font-extrabold tracking-[-0.02em] leading-[1.02] ${accent ? "text-wri-cyan-dark" : ""}`}>{title}</p>
+        <p className="text-3xl text-wri-grey mt-5">{hint}</p>
+    </>
 }
 
 function DisplayDifficulty(props: {difficulty: string}) {
-    if(props.difficulty==="hard") {
-        return <p className="text-center inline font-bold">Schwer</p>
-    }else if(props.difficulty === "medium") {
-        return <p className="text-center inline font-bold">Mittel</p>
-    }else{
-        return <p className="text-center inline font-bold">Leicht</p>
-    }
+    const label = props.difficulty === "hard" ? "Schwer" : props.difficulty === "medium" ? "Mittel" : "Leicht";
+    return <span className="font-bold text-wri-petrol">{label}</span>
 }
