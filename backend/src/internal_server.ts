@@ -233,13 +233,13 @@ export function initInternalServer() {
 
     app.ws('/ws', (ws, req) => {
         const frontendID = req.query.frontendID as string | undefined;
-        const indoor = req.query.indoor as boolean | undefined;
+        const indoor = req.query.indoor === "true";
 
 
         internalConnections.push({
             ws: ws,
             frontendID: frontendID ?? "",
-            indoor: indoor ?? false
+            indoor: indoor
         });
 
         sendInternalState(ws);

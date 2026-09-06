@@ -19,8 +19,6 @@ export const playerDataStream = new stream.PassThrough();
 
 
 export let sendStateToClient: (() => void) | null = null;
-let previousSessionID = "";
-
 // Centralized player message handlers
 function handlePlayerMessage(parsedMSG: any) {
     if (!parsedMSG?.type) return;
@@ -63,7 +61,7 @@ export function initServer() {
     app.ws('/play', function (ws, req) {
         const sessionID = req.query.sessionID;
         let isPlayer = false;
-        if (sessionID && (sessionID === previousSessionID || sessionID === sessionState.currentSessionID)) {
+        if (sessionID && (sessionID === sessionState.previousSessionID || sessionID === sessionState.currentSessionID)) {
 
             state.isPlayerConnected = true;
             isPlayer = true;

@@ -38,7 +38,7 @@ export class PlayerSelectionAbortError extends Error {
 }
 
 const raceTimeout = (ms: number) => new Promise((_, reject) => setTimeout(()=>{
-    reject();
+    reject(new Error(`Timed out after ${ms}ms`));
 }, ms));
 
 export async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {

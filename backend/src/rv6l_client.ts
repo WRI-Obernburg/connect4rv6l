@@ -65,7 +65,9 @@ export async function initRV6LClient() {
     }
     client = new net.Socket();
     try {
-        client.connect(80, '192.168.2.1', async function () {
+        const ROBOT_HOST = process.env.ROBOT_HOST || '192.168.2.1';
+        const ROBOT_PORT = parseInt(process.env.ROBOT_PORT || '80');
+        client.connect(ROBOT_PORT, ROBOT_HOST, async function () {
 
             logEvent({
                 errorType: ErrorType.INFO,
@@ -111,7 +113,7 @@ export async function initRV6LClient() {
             client.destroy(); // Destroy the current client connection
             client.removeAllListeners(); // Remove all listeners to avoid duplicate events
             sendStateToControlPanelClient?.();
-            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 5 seconds before reconnecting
+            await new Promise(resolve => setTimeout(resolve, 5000));
             logEvent({
                 errorType: ErrorType.INFO,
                 description: "Reconnecting to RV6L...",
@@ -457,8 +459,7 @@ async function waitForMessage(id: number): Promise<any> {
 
         const timeoutID = setTimeout(() => {
             cancel();
-            reject(new Error(`Timeout waiting for message with id ${id}`));
-        }, 5000); // 30 seconds timeout
+        }, 5000);
         abortSignal.once('abort', cancel); // Listen for abort signal
 
     });
