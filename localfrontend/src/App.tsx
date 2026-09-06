@@ -9,6 +9,7 @@ import { useQueryParam } from './lib/utils';
 import { useEffect } from 'react';
 import sleeping from "./assets/sleeping_rv6l.png";
 import { v4 as uuidv4 } from 'uuid';
+import { initTelemetry, logEvent, wsTelemetry } from './lib/telemetry';
 
 
 function App() {
@@ -27,8 +28,10 @@ function App() {
     readyState,
     getWebSocket,
   } = useWebSocket(`ws://${(typeof window !== "undefined")?window.location.hostname:""}:4000/ws?frontendID=${frontendID}${indoor?"&indoor=true":""}`, {
-    onOpen: () => console.log('opened'),
-    onClose: () => {
+    onOpen: () => wsTelemetry.onOpen("/ws"),
+    onError: wsTelemetry.onError,
+    onClose: (event) => {
+      wsTelemetry.onClose(event);
       setQrCodeLink(null);
       setState(null);
       console.log('closed');
@@ -43,7 +46,12 @@ function App() {
                 setQrCodeLink(data.qrCodeLink);
             }
             if (data.gameState) {
-                setState(data.gameState);
+                setState((previous) => {
+                    if (previous?.stateName !== data.gameState.stateName) {
+                        logEvent("INFO", `Game state received: ${data.gameState.stateName}`, {"game.state": data.gameState.stateName});
+                    }
+                    return data.gameState;
+                });
             }
         }else if(data.action === "identifyStart") {
             setIdentifyMode(true);
@@ -60,6 +68,10 @@ function App() {
   });
 
     useEffect(() => {
+        initTelemetry("connect4-localfrontend", `http://${window.location.hostname}:4000/telemetry`, {
+            "frontend.id": frontendID,
+            "ui.indoor": indoor,
+        });
         window.localStorage.setItem("frontendID", frontendID);
         setTimeout(()=>{
             // @ts-ignore
