@@ -20,6 +20,7 @@ export default function Game(props: { sessionID: string, indoor: boolean }) {
 
     const [isSessionIDValid, setIsSessionIDValid] = useState(true);
     const [gameState, setGameState] = useState<GameState | null>(null)
+    const [connectionFailed, setConnectionFailed] = useState(false);
 
     const {
         sendJsonMessage,
@@ -28,9 +29,16 @@ export default function Game(props: { sessionID: string, indoor: boolean }) {
         onOpen: () => console.log('opened'),
         onMessage: (message) => {
             console.log('message received', message);
-            const data = JSON.parse(message.data) as GameState;
-            setGameState(data);
+            try {
+                setGameState(JSON.parse(message.data) as GameState);
+            } catch (e) {
+                console.error('Invalid game state received', e);
+            }
         },
+        // about 30 seconds of retries, then show an error instead of loading forever
+        reconnectAttempts: 10,
+        reconnectInterval: 3000,
+        onReconnectStop: () => setConnectionFailed(true),
         //Will attempt to reconnect on all close events, such as server shutting down
         shouldReconnect: (closeEvent) => {
             if (closeEvent.code === 4422) {
@@ -66,8 +74,16 @@ export default function Game(props: { sessionID: string, indoor: boolean }) {
         return <Panel title="Dieses Spiel ist abgelaufen" text="Scanne den QR-Code am Spieltisch, um ein neues Spiel zu starten." />
     }
 
+    if (connectionFailed) {
+        return <Panel title="Keine Verbindung zum Spiel" text="Der Server ist gerade nicht erreichbar. Prüfe deine Internetverbindung und versuche es noch einmal.">
+            <RetryButton />
+        </Panel>
+    }
+
     if(readyState !== 1) {
-        return <Panel title="Verbindung wird aufgebaut" text="Einen Moment." />
+        return gameState
+            ? <Panel title="Verbindung unterbrochen" text="Die Verbindung wird wiederhergestellt. Einen Moment." />
+            : <Panel title="Verbindung wird aufgebaut" text="Einen Moment." />
     }
 
     if (!gameState) {
@@ -129,12 +145,16 @@ export default function Game(props: { sessionID: string, indoor: boolean }) {
 
 }
 
-function Panel(props: { title: string, text: string, children?: React.ReactNode }) {
+export function Panel(props: { title: string, text: string, children?: React.ReactNode }) {
     return <div className="panel rounded-2xl p-6 mt-8 flex flex-col gap-2">
         <p className="text-2xl font-extrabold tracking-[-0.02em] leading-tight">{props.title}</p>
         <p className="text-wri-grey">{props.text}</p>
         {props.children && <div className="mt-3">{props.children}</div>}
     </div>
+}
+
+export function RetryButton(props: { onClick?: () => void }) {
+    return <Button onClick={props.onClick ?? (() => window.location.reload())} size="lg" className="h-12 px-7 rounded-lg font-extrabold text-base">Erneut versuchen</Button>
 }
 
 function CurrentAction(props: { gameState: GameState }) {
