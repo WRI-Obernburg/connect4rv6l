@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 // Extracts the controller message texts (M1 ... M9999) from the teach-pendant JAR for the backend.
-// The controller only sends message numbers; the texts live in the pendant software. They are proprietary,
-// so they are extracted locally into backend/data/rsv_messages.json (gitignored) instead of being committed.
-// The backend uses them for message numbers that are missing in the handbook reference (rsv_errors.json).
+// The controller only sends message numbers; the texts live in the pendant software. The backend uses them
+// for message numbers that are missing in the handbook reference (backend/src/data/rsv_errors.json).
 //
 //   node tools/extract-rsv-messages.mjs /path/to/RSVPCXBDO.jar [output file]
 
@@ -16,7 +15,7 @@ if (!jar) {
     console.error("Usage: node tools/extract-rsv-messages.mjs /path/to/RSVPCXBDO.jar [output file]");
     process.exit(1);
 }
-const out = process.argv[3] ?? join(dirname(fileURLToPath(import.meta.url)), "..", "backend", "data", "rsv_messages.json");
+const out = process.argv[3] ?? join(dirname(fileURLToPath(import.meta.url)), "..", "backend", "src", "data", "rsv_messages.json");
 
 const FILES = { en: "Library.properties", de: "Library_de.properties" };
 
@@ -49,5 +48,6 @@ for (const [lang, file] of Object.entries(FILES)) {
 }
 
 mkdirSync(dirname(out), { recursive: true });
-writeFileSync(out, JSON.stringify(catalog));
+// the backend only shows German texts
+writeFileSync(out, JSON.stringify({ de: catalog.de }));
 console.log(`Written to ${out}`);
