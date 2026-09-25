@@ -82,15 +82,9 @@ const CONNECTION_LOST = {
     title: "Keine Verbindung zur Robotersteuerung", severity: "fatal" as const, critical: true, source: "Backend",
 };
 
+// The connection is kept up in mock mode as well: mocked actions send no commands, and after switching the mock
+// off the robot is available again right away (returning here would also end the reconnect loop for good)
 export async function initRV6LClient() {
-    if (RV6L_STATE.mock) {
-        logEvent({
-            errorType: ErrorType.WARNING,
-            description: "RV6L is in MOCK mode, using mock data instead of real RV6L connection.",
-            date: new Date().toString()
-        })
-        return;
-    }
     client = new net.Socket();
     client.setEncoding('utf8'); // don't split multi-byte characters between chunks
     receiveBuffer = '';

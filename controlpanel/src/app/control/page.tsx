@@ -72,7 +72,7 @@ function SystemWideController(props: { gameDataContext: GameData }) {
         <CardContent className={"flex flex-col justify-center items-center gap-4"}>
 
             <div className={"flex flex-row justify-center items-center gap-4"}>
-                <Checkbox defaultChecked={props.gameDataContext.rv6l.mock} onCheckedChange={(checked) => {
+                <Checkbox checked={props.gameDataContext.rv6l.mock} onCheckedChange={(checked) => {
                     websocketSendContext!(JSON.stringify({
                         action: "control",
                         command: "mock_rv6l",

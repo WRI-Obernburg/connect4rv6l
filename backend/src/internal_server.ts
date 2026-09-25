@@ -1,6 +1,6 @@
 import {GameManager, gameStates} from "./game/game_manager.ts";
 import {getTelemetry, listSymbolsForExplorer, readSymbolsForExplorer} from "./rv6l_telemetry.ts";
-import {acknowledgeAllInactive, acknowledgeFault, createManualFault, getFaultMemory} from "./fault_memory.ts";
+import {acknowledgeAllInactive, acknowledgeFault, createManualFault, getFaultMemory, updateLock} from "./fault_memory.ts";
 import {getCoincidence, getLogbook, getProgramSource, getSystemInfo, getTasks} from "./rv6l_monitor.ts";
 import express from 'express';
 import WebSocket from 'ws';
@@ -134,6 +134,8 @@ async function handleControlCommand(data: any) {
         async mock_rv6l(payload) {
             if (payload.mock != null && typeof payload.mock === 'boolean') {
                 RV6L_STATE.mock = payload.mock;
+                // robot faults lock the game only without mock, so check the lock again
+                updateLock();
                 sendStateToControlPanelClient!();
             } else {
                 logEvent({

@@ -15,7 +15,7 @@ export default function FaultMemoryPage() {
         return <div className={"flex justify-center h-screen w-full items-center text-3xl text-gray-700"}>Verbinden...</div>;
     }
 
-    const memory = gameData.faultMemory ?? {open: [], acknowledged: [], lockReasons: []};
+    const memory = gameData.faultMemory ?? {open: [], acknowledged: [], lockReasons: [], mock: false};
     const locked = memory.lockReasons.length > 0;
     // active and critical faults first, newest first within each block
     const open = [...memory.open].sort((a, b) =>
@@ -41,6 +41,9 @@ export default function FaultMemoryPage() {
                     : <div className={"mt-2 rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800"}>
                         Keine offenen kritischen Fehler, das Spiel ist freigegeben.
                     </div>}
+                {memory.mock && <div className={"mt-2 rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-900"}>
+                    Die RV6L-Verbindung wird gemockt. Fehler des Roboters und der Steuerung sperren das Spiel deshalb nicht.
+                </div>}
                 <ManualFaultForm onCreate={(title, details, critical) =>
                     send?.(JSON.stringify({action: "create_manual_fault", title, details, critical}))}/>
             </CardHeader>
@@ -53,7 +56,8 @@ export default function FaultMemoryPage() {
                     </Button>
                 </div>
                 {open.length === 0 && <p className={"text-sm text-gray-400"}>Keine offenen Einträge.</p>}
-                {open.map((fault) => <FaultRow key={fault.key} fault={fault} onAcknowledge={() => acknowledge(fault.key)}/>)}
+                {open.map((fault) => <FaultRow key={fault.key} fault={fault} ignored={memory.mock && fault.hardware}
+                                                onAcknowledge={() => acknowledge(fault.key)}/>)}
             </CardContent>
         </Card>
 
@@ -101,7 +105,7 @@ function ManualFaultForm(props: { onCreate: (title: string, details: string, cri
     </div>;
 }
 
-function FaultRow(props: { fault: FaultEntry, onAcknowledge?: () => void }) {
+function FaultRow(props: { fault: FaultEntry, ignored?: boolean, onAcknowledge?: () => void }) {
     const f = props.fault;
     const tone = f.severity === "fatal" ? "border-red-300" : "border-yellow-300";
     let status = <span className={"rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-700"}>behoben, nicht quittiert</span>;
@@ -112,7 +116,8 @@ function FaultRow(props: { fault: FaultEntry, onAcknowledge?: () => void }) {
         <div className={"flex flex-col gap-1"}>
             <div className={"flex flex-wrap items-center gap-2"}>
                 {status}
-                {f.critical && <span className={"rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white"}>kritisch</span>}
+                {f.critical && !props.ignored && <span className={"rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white"}>kritisch</span>}
+                {f.critical && props.ignored && <span className={"rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-600"}>sperrt nicht (Mock)</span>}
                 <span className={"text-xs text-gray-500"}>{f.source}</span>
             </div>
             <p className={"font-semibold"}>{f.title}</p>

@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname } from "path";
 import { ErrorType, logEvent } from "./errorHandler/error_handler.ts";
 import { sendState } from "./state.ts";
+import { RV6L_STATE } from "./rv6l_client.ts";
 
 /**
  * Fault memory like in a car: a fault stays stored after its cause is gone and has to be
@@ -53,7 +54,18 @@ export function initFaultMemory() {
 }
 
 export function getFaultMemory() {
-    return { open, acknowledged, lockReasons: getLockReasons() };
+    return {
+        open: open.map((entry) => ({ ...entry, hardware: isHardwareFault(entry) })),
+        acknowledged,
+        lockReasons: getLockReasons(),
+        mock: RV6L_STATE.mock,
+    };
+}
+
+// Faults that come from the robot or its controller: the telemetry, messages of the controller, the connection
+// and robot actions. With the RV6L connection mocked they do not lock the game, so it can be played without robot.
+function isHardwareFault(entry: FaultEntry) {
+    return ["telemetry:", "message:", "rv6l:"].some((prefix) => entry.key.startsWith(prefix));
 }
 
 /**
@@ -61,7 +73,7 @@ export function getFaultMemory() {
  * operating mode, program, connection), which the telemetry reports as critical faults. Empty means free.
  */
 export function getLockReasons(): string[] {
-    return open.filter((entry) => entry.critical).map((entry) => entry.title);
+    return open.filter((entry) => entry.critical && !(RV6L_STATE.mock && isHardwareFault(entry))).map((entry) => entry.title);
 }
 
 // The game manager switches into and out of ERROR; registered here to avoid an import cycle

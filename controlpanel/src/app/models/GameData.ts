@@ -52,6 +52,8 @@ export interface FaultEntry {
     lastSeen: string
     occurrences: number
     acknowledgedAt?: string
+    // comes from the robot or its controller; ignored for the lock while the RV6L connection is mocked
+    hardware?: boolean
 }
 
 export interface GameData {
@@ -103,6 +105,7 @@ export interface GameData {
         acknowledged: FaultEntry[]
         // open critical faults; while there are any, the game is locked in ERROR
         lockReasons: string[]
+        mock?: boolean
     },
     qrCodeLink: string,
     errors: ErrorDescription[],
