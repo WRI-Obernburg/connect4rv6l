@@ -356,6 +356,74 @@ curl http://localhost:3000/state
 | Variable | Beschreibung | Default |
 |----------|-------------|---------|
 | `FRONTEND_ADDRESS` | Basis-URL für QR-Code-Links | `http://localhost:8080` |
+| `ROBOT_HOST` | IP/Hostname des RV6L (oder des Simulators) | `192.168.2.1` |
+| `ROBOT_PORT` | TCP-Port des RV6L | `80` |
+| `AXIOM_TOKEN` | Axiom API-Token mit Ingest-Recht. Ohne Token wird keine Telemetrie exportiert. | – |
+| `AXIOM_DATASET` | Axiom-Dataset, in das Traces und Logs geschrieben werden | – |
+| `AXIOM_URL` | Axiom API-Basis-URL (`https://api.eu.axiom.co` für EU) | `https://api.axiom.co` |
+| `OTEL_SERVICE_NAME` | Service-Name des Backends in Axiom | `connect4-backend` |
+| `OTEL_DEBUG` | `1` gibt Spans und Logs zusätzlich auf stdout aus | – |
+
+## 📈 Observability (OpenTelemetry + Axiom)
+
+Alle Komponenten senden Traces und Logs per OpenTelemetry (OTLP/HTTP) nach [Axiom](https://axiom.co).
+Ziel ist, bei einem Fehler über den gesamten Stack nachvollziehen zu können, was passiert ist:
+vom Tippen auf dem Smartphone über die Zustandsmaschine bis zum einzelnen XML-Kommando an den Roboter.
+
+### Aufbau
+
+```mermaid
+graph LR
+    M[Mobile Frontend] -->|OTLP| P[Backend /telemetry Proxy]
+    C[Control Panel] -->|OTLP| P
+    L[Local Display] -->|OTLP| P
+    B[Backend SDK] -->|OTLP + Token| A[Axiom]
+    P -->|OTLP + Token| A
+```
+
+- **Backend** (`backend/src/telemetry.ts`) exportiert direkt nach Axiom. Der Token bleibt im Backend.
+- **Frontends** (`src/lib/telemetry.ts`, identische Datei in allen drei Apps) exportieren an den Proxy
+  `/telemetry/v1/traces` bzw. `/telemetry/v1/logs` auf Port 3000 (Mobile) bzw. 4000 (Control Panel, Display).
+  Der Proxy setzt Token und Dataset und leitet den OTLP-Payload unverändert weiter.
+- **Trace-Propagation über WebSocket:** Jede vom Frontend gesendete Nachricht enthält ein `traceparent`-Feld.
+  Der Backend-Span (`player.placeChip`, `controlpanel.control.move_to_column`, …) wird damit zum Kind des UI-Spans.
+
+### Trace-Struktur
+
+| Span | Beschreibung | Wichtige Attribute |
+|------|-------------|--------------------|
+| `game` | Ein Span pro Spiel (Root-Trace). Enthält Link auf den auslösenden Span. | `game.id`, `game.difficulty`, `game.end_reason` |
+| `state.<NAME>` | Ein Span pro Zustand der State-Maschine, Kind von `game` | `game.state.name`, `game.state.previous`, `game.board`, `game.board.after` |
+| `rv6l.<Aktion>` | Roboteraktion (`MoveToBlue`, `MoveToColumn3`, `RemoveFromField`, …), Kind des Zustands | `rv6l.action`, `rv6l.duration_ms`, `rv6l.blue_chips_left` |
+| `rv6l.write` / `rv6l.read` | Einzelnes XML-Kommando (`symbolApi`) | `rv6l.symbol`, `rv6l.value`, `rv6l.message_id`, Event `rv6l.response` |
+| `rv6l.wait` | Polling bis `I_Aktion == 0` | `rv6l.polls`, `rv6l.duration_ms` |
+| `player.<type>` | Eingehende Spieler-Nachricht | `player.message.slot`, `session.id` |
+| `controlpanel.<action>` | Eingehende Control-Panel-Nachricht | `controlpanel.command`, `controlpanel.payload` |
+| `ui.<type>` | Interaktion im Browser (Frontend-Service) | `message.*` |
+
+Jeder Span und jeder Log-Eintrag trägt `game.id`, `game.state`, `session.id` und `rv6l.mock`.
+Alle Aufrufe von `logEvent()` (Fehlerprotokoll) werden zusätzlich als OTel-Log mit Trace-ID exportiert,
+`FATAL`-Events setzen den aktiven Span auf Status `ERROR`.
+
+### Typische Abfragen in Axiom (APL)
+
+```kusto
+// Alle Spans eines Spiels, chronologisch
+['connect4'] | where ['attributes.game.id'] == "<game-id>" | order by _time asc
+
+// Welche Roboteraktionen sind fehlgeschlagen?
+['connect4'] | where name startswith "rv6l." and ['status.code'] == "ERROR"
+
+// Wie lange dauert das Polling pro Aktion im Schnitt?
+['connect4'] | where name == "rv6l.wait" | summarize avg(['attributes.rv6l.duration_ms']) by ['attributes.game.state']
+```
+
+### Lokal testen ohne Axiom
+
+```bash
+OTEL_DEBUG=1 bun run dev              # Spans/Logs auf stdout
+AXIOM_URL=http://localhost:4318 AXIOM_TOKEN=x AXIOM_DATASET=x bun run dev   # z.B. gegen einen lokalen OTel Collector
+```
 
 
 ## 🔍 Troubleshooting

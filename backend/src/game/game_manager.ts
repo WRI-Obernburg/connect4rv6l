@@ -6,6 +6,8 @@ import {sendState, state} from "../state.ts";
 import type GameState from "./game_state.ts";
 import type {GameStateOutput} from "./game_state.ts";
 import EventEmitter from 'events';
+import {context, gameContext, SpanStatusCode, trace, tracer, type Span} from "../telemetry.ts";
+import {v4 as uuidv4} from 'uuid';
 
 const PlayerSelect: GameState<void, number> = {
     stateName: "PLAYER_SELECTION",
@@ -355,6 +357,7 @@ export const gameStates = {
 export let GameManager: {
     currentGameState: GameState<any, any>;
     switchState: Function;
+    enterState: (newState: GameState<any, any>, newStateData?: any) => void;
     startNewGame: Function;
     isPhysicalBoardCleaned: boolean;
     resetGame: (instantRestart: boolean) => boolean;
@@ -362,12 +365,93 @@ export let GameManager: {
     gameEvent: EventEmitter;
     raiseError: (error: ErrorDescription) => void;
 };
+
+// --- Telemetry: one span per game, one child span per state -----------------
+let gameSpan: Span | null = null;
+let stateSpan: Span | null = null;
+const GAME_END_STATES = ["IDLE", "ERROR", "SLEEP"];
+
+function endGameSpan(reason: string) {
+    if (!gameSpan) return;
+    gameSpan.setAttribute("game.end_reason", reason);
+    if (reason === "ERROR") gameSpan.setStatus({code: SpanStatusCode.ERROR, message: "Game ended in ERROR state"});
+    gameSpan.end();
+    gameSpan = null;
+    gameContext.gameId = null;
+}
+
+function startGameSpan() {
+    gameContext.gameId = uuidv4();
+    // A game is a root trace of its own (it can run for minutes); the span that
+    // triggered it (player tap, control panel action) is attached as a link.
+    const trigger = trace.getActiveSpan()?.spanContext();
+    gameSpan = tracer.startSpan("game", {
+        root: true,
+        attributes: {"game.difficulty": state.difficulty},
+        links: trigger ? [{context: trigger}] : [],
+    });
+    trace.getActiveSpan()?.addEvent("game.started", {"game.id": gameContext.gameId!});
+}
+
+function beginStateSpan(newState: GameState<any, any>, newStateData: any, previousStateName: string) {
+    const parent = gameSpan ? trace.setSpan(context.active(), gameSpan) : context.active();
+    let dataAttr: string | undefined;
+    try {
+        dataAttr = newStateData === undefined ? undefined : JSON.stringify(newStateData);
+    } catch {
+        dataAttr = String(newStateData);
+    }
+    stateSpan = tracer.startSpan(`state.${newState.stateName}`, {
+        attributes: {
+            "game.state.name": newState.stateName,
+            "game.state.previous": previousStateName,
+            "game.state.expected_duration_ms": newState.expectedDuration ?? -1,
+            "game.state.data": dataAttr ?? "",
+            "game.board": JSON.stringify(state.board),
+        },
+    }, parent);
+    if (newState.stateName === "ERROR") {
+        stateSpan.setStatus({code: SpanStatusCode.ERROR, message: newStateData?.description ?? "ERROR state"});
+    }
+    // Terminal states have no action and may stay active for hours: export them right away.
+    if (GAME_END_STATES.includes(newState.stateName)) {
+        stateSpan.end();
+        stateSpan = null;
+    }
+}
+
+function endStateSpan() {
+    if (!stateSpan) return;
+    stateSpan.setAttribute("game.board.after", JSON.stringify(state.board));
+    stateSpan.end();
+    stateSpan = null;
+}
+
+/** Context in which a state's action runs, so robot commands nest under the state span. */
+function stateContext() {
+    return stateSpan ? trace.setSpan(context.active(), stateSpan) : context.active();
+}
+// ---------------------------------------------------------------------------
+
 GameManager = {
     currentGameState: Idle,
     isPhysicalBoardCleaned: true,
     gameEvent: new EventEmitter(),
 
     switchState: (newState: GameState<any, any>, newStateData: any) => {
+        const previousStateName = GameManager.currentGameState.stateName;
+
+        endStateSpan();
+        if (newState.stateName === "PLAYER_SELECTION" && (gameSpan == null || previousStateName === "CLEAN_UP")) {
+            endGameSpan("RESTART");
+            startGameSpan();
+        }
+        gameContext.stateName = newState.stateName;
+        beginStateSpan(newState, newStateData, previousStateName);
+        if (GAME_END_STATES.includes(newState.stateName)) {
+            endGameSpan(newState.stateName);
+        }
+
         logEvent({
             errorType: ErrorType.INFO,
             description: `Switching to state: ${newState.stateName}`,
@@ -383,12 +467,19 @@ GameManager = {
 
     },
 
+    /** Switch to a state and run its action inside the state's trace context. */
+    enterState: (newState: GameState<any, any>, newStateData?: any) => {
+        GameManager.switchState(newState, newStateData);
+        context.with(stateContext(), () => {
+            GameManager.handleStateTransition(newState.action(newStateData), newState);
+        });
+    },
+
     startNewGame: () => {
 
         if (GameManager.currentGameState.stateName === "IDLE") {
             state.gameStartTime = Date.now();
-            GameManager.switchState(PlayerSelect)
-            GameManager.handleStateTransition(PlayerSelect.action(), PlayerSelect);
+            GameManager.enterState(PlayerSelect);
         } else {
             GameManager.resetGame(true);
         }
@@ -400,8 +491,7 @@ GameManager = {
         if (["ROBOT_WIN", "PLAYER_WIN", "TIE", "PLAYER_SELECTION"].includes(GameManager.currentGameState.stateName)) {
             state.gameStartTime = Date.now();
 
-            GameManager.switchState(CleanUp);
-            GameManager.handleStateTransition(CleanUp.action(instantRestart), CleanUp);
+            GameManager.enterState(CleanUp, instantRestart);
             return true;
         }
         return false;
@@ -412,22 +502,23 @@ GameManager = {
         try {
             data = await dataPromise;
         } catch (e: any) {
+            trace.getActiveSpan()?.recordException(e instanceof globalThis.Error ? e : new globalThis.Error(String(e)));
             GameManager.raiseError({
                 errorType: ErrorType.FATAL,
-                description: "An error occurred during state " + callingState.stateName,
+                description: "An error occurred during state " + callingState.stateName + (e?.message ? `: ${e.message}` : ""),
                 date: new Date().toString()
             });
             return;
         }
 
         if (callingState !== GameManager.currentGameState) { // If the state has changed during the action execution, we ignore the result
+            trace.getActiveSpan()?.addEvent("state.result_ignored", {"game.state.current": GameManager.currentGameState.stateName});
             return;
         }
 
         if (data.canContinue) {
             if (data.subsequentState != null) {
-                GameManager.switchState(data.subsequentState, data.output);
-                GameManager.handleStateTransition(data.subsequentState.action(data.output), data.subsequentState);
+                GameManager.enterState(data.subsequentState, data.output);
             }
         }
     },

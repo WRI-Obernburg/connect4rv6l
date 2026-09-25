@@ -2,6 +2,7 @@ import { FRONTEND_ADDRESS } from ".";
 import {sendStateToControlPanelClient, sendStateToInternalClient} from "./internal_server";
 import { state } from "./state";
 import { v4 as uuidv4 } from 'uuid';
+import { emitLog, gameContext } from "./telemetry";
 
 var qrcode = require('qrcode-terminal');
 
@@ -13,6 +14,7 @@ export const sessionState = {
 export function initSession() {
     sessionState.currentSessionID = uuidv4();
     sessionState.previousSessionID = sessionState.currentSessionID;
+    gameContext.sessionId = sessionState.currentSessionID;
     printSessionInfo();
 
     setInterval(() => {
@@ -21,6 +23,8 @@ export function initSession() {
     
             sessionState.previousSessionID = sessionState.currentSessionID;
             sessionState.currentSessionID = uuidv4();
+            gameContext.sessionId = sessionState.currentSessionID;
+            emitLog("INFO", "Session rotated", {"session.id.previous": sessionState.previousSessionID});
             //TODO refresh frontend
             printSessionInfo();
             sendStateToInternalClient?.();

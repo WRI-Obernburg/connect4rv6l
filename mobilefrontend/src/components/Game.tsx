@@ -1,5 +1,6 @@
 import {GameState} from "@/interface/GameState";
-import {useState} from "react";
+import {useEffect, useState} from "react";
+import {initTelemetry, logEvent, tracedMessage, wsTelemetry} from "@/lib/telemetry";
 import useWebSocket from "react-use-websocket";
 import {Button} from "@/components/ui/button"
 import {
@@ -21,19 +22,33 @@ export default function Game(props: { sessionID: string, indoor: boolean }) {
     const [isSessionIDValid, setIsSessionIDValid] = useState(true);
     const [gameState, setGameState] = useState<GameState | null>(null)
 
+    useEffect(() => {
+        const scheme = window.location.protocol === "https:" ? "https" : "http";
+        initTelemetry("connect4-mobile", `${scheme}://${process.env.NEXT_PUBLIC_BACKEND_URL}/telemetry`, {
+            "session.id": props.sessionID,
+            "ui.indoor": props.indoor,
+        });
+    }, [props.sessionID, props.indoor]);
+
     const {
         sendJsonMessage,
         readyState
     } = useWebSocket(`https://${process.env.NEXT_PUBLIC_BACKEND_URL}/play?sessionID=` + props.sessionID, {
-        onOpen: () => console.log('opened'),
+        onOpen: () => wsTelemetry.onOpen("/play"),
+        onError: wsTelemetry.onError,
         onMessage: (message) => {
             console.log('message received', message);
             const data = JSON.parse(message.data) as GameState;
+            if (data.stateName !== gameState?.stateName) {
+                logEvent("INFO", `Game state received: ${data.stateName}`, {"game.state": data.stateName});
+            }
             setGameState(data);
         },
         //Will attempt to reconnect on all close events, such as server shutting down
         shouldReconnect: (closeEvent) => {
+            wsTelemetry.onClose(closeEvent);
             if (closeEvent.code === 4422) {
+                logEvent("WARN", "Session ID rejected by backend");
                 setIsSessionIDValid(false);
                 return false; // Don't reconnect if the session is not found
             }
@@ -45,18 +60,19 @@ export default function Game(props: { sessionID: string, indoor: boolean }) {
     function handleColumnClick(columnIndex: number) {
         console.log('Column clicked:', columnIndex);
         if (gameState && gameState.stateName == "PLAYER_SELECTION") {
-            sendJsonMessage({
+            sendJsonMessage(tracedMessage({
                 type: "placeChip",
-                slot: props.indoor?columnIndex: 6- columnIndex // Adjust for outdoor play,
-            });
+                slot: props.indoor?columnIndex: 6- columnIndex, // Adjust for outdoor play,
+                clickedColumn: columnIndex,
+            }));
         }
     }
 
     function handleDifficultyChange(difficulty: string) {
-        sendJsonMessage({
+        sendJsonMessage(tracedMessage({
             type: "setDifficulty",
             difficulty: difficulty
-        })
+        }))
     }
 
 
@@ -99,9 +115,9 @@ export default function Game(props: { sessionID: string, indoor: boolean }) {
         return <div className="flex flex-col gap-4 justify-center self-center w-fit mt-4">
             <div className="text-center text-2xl font-bold">Spiel ist noch nicht gestartet</div>
             <StartGame gameState={gameState.stateName} onGameStart={() => {
-                sendJsonMessage({
+                sendJsonMessage(tracedMessage({
                     type: "startGame",
-                });
+                }));
             }} />
         </div>
     }
@@ -134,9 +150,9 @@ export default function Game(props: { sessionID: string, indoor: boolean }) {
         <DifficultyChooser gameState={gameState} onDifficultyChange={handleDifficultyChange} ></DifficultyChooser>
 
         <StartGame onGameStart={() => {
-            sendJsonMessage({
+            sendJsonMessage(tracedMessage({
                 type: "startGame",
-            });
+            }));
         }} gameState={gameState.stateName} />
 
     </div>

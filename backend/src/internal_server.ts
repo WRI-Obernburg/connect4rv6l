@@ -22,11 +22,14 @@ import {
     putBackToRed
 } from "./rv6l_client.ts";
 import {type ErrorDescription, errors, ErrorType, logEvent} from "./errorHandler/error_handler.ts";
+import {telemetryProxyRouter} from "./telemetry_proxy.ts";
+import {contextFromMessage, emitLog, gameContext, SpanKind, withSpan} from "./telemetry.ts";
 
 const port = 4000;
 
 const app = expressWs(express()).app;
 app.use(cors());
+app.use("/telemetry", telemetryProxyRouter());
 
 export const connectionID = uuidv4();
 
@@ -128,6 +131,8 @@ async function handleControlCommand(data: any) {
         async mock_rv6l(payload) {
             if (payload.mock != null && typeof payload.mock === 'boolean') {
                 RV6L_STATE.mock = payload.mock;
+                gameContext.rv6lMock = payload.mock;
+                emitLog("WARN", `RV6L mock mode set to ${payload.mock} from control panel`);
                 sendStateToControlPanelClient!();
             } else {
                 logEvent({
@@ -179,8 +184,7 @@ async function handleControlPanelMessage(ws: WebSocket, data: any) {
                 errorType: ErrorType.INFO,
                 date: new Date().toString()
             })
-            GameManager.switchState(gameStates[payload.stateName as keyof typeof gameStates], payload.stateData);
-            GameManager.handleStateTransition(GameManager.currentGameState.action(payload.stateData), GameManager.currentGameState);
+            GameManager.enterState(gameStates[payload.stateName as keyof typeof gameStates], payload.stateData);
             sendStateToControlPanelClient!();
         },
         async control(payload) {
@@ -208,7 +212,12 @@ async function handleControlPanelMessage(ws: WebSocket, data: any) {
 
     const handler = actionHandlers[data.action as keyof typeof actionHandlers];
     if (handler) {
-        await handler(data);
+        const name = data.action === "control" ? `controlpanel.control.${data.command}` : `controlpanel.${data.action}`;
+        await withSpan(name, {
+            "controlpanel.action": String(data.action),
+            "controlpanel.command": String(data.command ?? ""),
+            "controlpanel.payload": JSON.stringify({...data, traceparent: undefined, tracestate: undefined}).slice(0, 2000),
+        }, async () => handler(data), {kind: SpanKind.SERVER, parent: contextFromMessage(data)});
     } else {
         logEvent({
             description: 'Unknown action received: ' + data.action,

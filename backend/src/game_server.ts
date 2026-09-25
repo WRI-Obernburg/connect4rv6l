@@ -8,12 +8,15 @@ import stream from "stream";
 import {GameManager, gameStates} from "./game/game_manager.ts";
 import {ErrorType, logEvent} from "./errorHandler/error_handler.ts";
 import { game } from "./game/game.ts";
+import {telemetryProxyRouter} from "./telemetry_proxy.ts";
+import {contextFromMessage, emitLog, SpanKind, withSpan} from "./telemetry.ts";
 
 const port = 3000
 
 const app = expressWs(express()).app;
 
 app.use(cors());
+app.use("/telemetry", telemetryProxyRouter());
 
 export const playerDataStream = new stream.PassThrough();
 
@@ -46,7 +49,16 @@ function handlePlayerMessage(parsedMSG: any) {
     };
 
     const handler = handlers[parsedMSG.type as keyof typeof handlers];
-    if (handler) handler(parsedMSG);
+    if (!handler) {
+        emitLog("WARN", `Unknown player message type: ${parsedMSG.type}`);
+        return;
+    }
+    // Parent = the span of the tap on the player's phone, if the frontend sent a traceparent.
+    withSpan(`player.${parsedMSG.type}`, {
+        "player.message.type": parsedMSG.type,
+        "player.message.slot": parsedMSG.slot ?? -1,
+        "player.message.difficulty": parsedMSG.difficulty ?? "",
+    }, async () => handler(parsedMSG), {kind: SpanKind.SERVER, parent: contextFromMessage(parsedMSG)});
 }
 
 export function initServer() {
@@ -65,6 +77,7 @@ export function initServer() {
 
             state.isPlayerConnected = true;
             isPlayer = true;
+            emitLog("INFO", "Player connected", {"session.id.requested": String(sessionID), "client.address": req.ip ?? ""});
 
             sendStateToClient = () => {
                 if (ws.readyState === ws.OPEN) {
@@ -106,6 +119,7 @@ export function initServer() {
         ws.on('close', function () {
 
             if (isPlayer) {
+                emitLog("INFO", "Player disconnected");
                 sendStateToClient = null; // Clear the function when the connection is closed
                 state.isPlayerConnected = false;
                 sendStateToInternalClient?.();
