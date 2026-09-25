@@ -38,7 +38,7 @@ export default function Overview() {
         <div className={"grid grid-cols-1 gap-4 xl:grid-cols-3"}>
             <GameCard game={game} now={now}/>
             <RobotCard game={game}/>
-            <JoinCard game={game}/>
+            <JoinCard game={game} now={now}/>
         </div>
         <div className={"grid grid-cols-1 gap-4 xl:grid-cols-3"}>
             <MagazineCard game={game}/>
@@ -116,7 +116,8 @@ function GameCard({game, now}: { game: GameData, now: number }) {
             <GameField board={game.gameState.board} xl={false} interactive={false}/>
             <dl className={"grid w-full grid-cols-2 gap-x-3 gap-y-1 text-sm"}>
                 <dt className={"text-gray-500"}>Zustand</dt><dd>{STATE_TEXT[state] ?? state}</dd>
-                <dt className={"text-gray-500"}>Spieler</dt><dd>{game.gameState.isPlayerConnected ? "verbunden" : "keiner verbunden"}</dd>
+                <dt className={"text-gray-500"}>Spieler</dt><dd>{game.players?.active?.nickname ?? (game.gameState.isPlayerConnected ? "niemand spielt, Handys verbunden" : "niemand verbunden")}</dd>
+                <dt className={"text-gray-500"}>Warteschlange</dt><dd>{game.players?.queue.length ? `${game.players.queue.length} warten` : "leer"}</dd>
                 <dt className={"text-gray-500"}>Dauer</dt><dd>{inGame && game.gameState.gameStartTime ? sinceText(game.gameState.gameStartTime, now) : "–"}</dd>
                 <dt className={"text-gray-500"}>Chips im Feld</dt><dd>{chips}</dd>
                 <dt className={"text-gray-500"}>Schwierigkeit</dt><dd>{difficulty[game.gameState.difficulty] ?? game.gameState.difficulty}</dd>
@@ -174,7 +175,7 @@ function describe(v: TelemetryValue | undefined, text?: string, tone?: string, a
 // ---------------------------------------------------------------------------------------------
 // How visitors join, and whether the displays on site are connected
 
-function JoinCard({game}: { game: GameData }) {
+function JoinCard({game, now}: { game: GameData, now: number }) {
     const host = typeof window !== "undefined" ? window.location.hostname : "";
     const displays = game.displays ?? [];
     return <Card className={"gap-3"}>
@@ -193,8 +194,45 @@ function JoinCard({game}: { game: GameData }) {
                         : "Keine Anzeige vor Ort verbunden"}
                 </p>
             </div>
+            <QueueSection game={game} now={now}/>
         </CardContent>
     </Card>;
+}
+
+const RESULT_TEXT = {player: "hat gewonnen", robot: "hat gegen den Roboter verloren", tie: "spielte unentschieden"};
+const OFFER_SECONDS = 60;
+
+// Who plays and who waits; entries can be removed, e.g. when someone left
+function QueueSection({game, now}: { game: GameData, now: number }) {
+    const send = useContext(WebsocketSendContext);
+    const players = game.players;
+    if (!players) return null;
+    return <div className={"w-full border-t pt-3"}>
+        <p className={"mb-2 font-semibold"}>Warteschlange</p>
+        <p className={"text-sm"}>
+            <span className={"text-gray-500"}>Spielt gerade: </span>
+            {players.active ? <b>{players.active.nickname}</b> : <span className={"text-gray-400"}>niemand</span>}
+        </p>
+        {players.lastResult && <p className={"text-sm text-gray-500"}>
+            Zuletzt: {players.lastResult.nickname} {RESULT_TEXT[players.lastResult.winner]} ({sinceText(players.lastResult.at, now)} her)
+        </p>}
+        {players.queue.length === 0
+            ? <p className={"mt-2 text-sm text-gray-400"}>Niemand wartet.</p>
+            : <ol className={"mt-2 flex flex-col gap-1"}>
+                {players.queue.map((entry) => <li key={entry.clientId} className={"flex items-center justify-between gap-2 rounded-md bg-gray-50 px-2 py-1 text-sm"}>
+                    <span className={"min-w-0"}>
+                        <b>{entry.position}.</b> {entry.nickname}
+                        <span className={"ml-2 text-xs text-gray-500"}>
+                            wartet {sinceText(entry.joinedAt, now)}
+                            {!entry.connected && ", Seite geschlossen"}
+                            {entry.offeredAt && `, ist dran (${Math.max(0, OFFER_SECONDS - Math.round((now - entry.offeredAt) / 1000))} s)`}
+                        </span>
+                    </span>
+                    <button className={"cursor-pointer text-xs text-gray-400 hover:text-red-600"}
+                            onClick={() => send?.(JSON.stringify({action: "remove_from_queue", clientId: entry.clientId}))}>entfernen</button>
+                </li>)}
+            </ol>}
+    </div>;
 }
 
 // ---------------------------------------------------------------------------------------------

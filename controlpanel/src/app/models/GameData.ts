@@ -56,6 +56,22 @@ export interface FaultEntry {
     hardware?: boolean
 }
 
+export interface QueueEntry {
+    clientId: string
+    nickname: string
+    joinedAt: number
+    offeredAt?: number
+    disconnectedAt?: number
+    position: number
+    connected: boolean
+}
+
+export interface PlayersState {
+    active: { clientId: string, nickname: string } | null
+    queue: QueueEntry[]
+    lastResult: { winner: "player" | "robot" | "tie", nickname: string, at: number } | null
+}
+
 export interface GameData {
     gameState: {
         isPlayerConnected: boolean
@@ -107,6 +123,7 @@ export interface GameData {
         lockReasons: string[]
         mock?: boolean
     },
+    players?: PlayersState,
     qrCodeLink: string,
     errors: ErrorDescription[],
     isInternalFrontendConnected: boolean,

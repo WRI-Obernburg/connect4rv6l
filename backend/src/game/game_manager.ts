@@ -1,5 +1,6 @@
 import {playerSelection, PlayerSelectionAbortError, waitForTimeout, withTimeout} from "./game_utils.ts";
 import {onLockChange, recordEvent} from "../fault_memory.ts";
+import {finishGame, releaseActivePlayer} from "../players.ts";
 import {initChipPalletizing, moveToBlue, moveToColumn, moveToRed, putBackToBlue, putBackToRed, removeFromField} from "../rv6l_client.ts";
 import {type ErrorDescription, ErrorType, logEvent} from "../errorHandler/error_handler.ts";
 import {applyGameMove, checkGameState, playAIMove, playMove, resetGame} from "./game.ts";
@@ -271,21 +272,18 @@ const Idle: GameState<void, void> = {
 
 }
 
-const RobotWin: GameState<void, void> = {
+const RobotWin: GameState<void, boolean> = {
     stateName: "ROBOT_WIN",
-    expectedDuration: 1000 * 60 * 2,
+    expectedDuration: null,
     startTime: null,
     endTime: null,
+    // the result stays visible on the phone, the board is cleared right away so nobody has to wait
     action: async () => {
-
-        await waitForTimeout(RobotWin.expectedDuration!);
-        if (GameManager.currentGameState === RobotWin) {
-            GameManager.resetGame(false);
-        }
-
+        finishGame("robot");
         return {
-            canContinue: false,
-            subsequentState: null
+            canContinue: true,
+            subsequentState: CleanUp,
+            output: false
         }
     }
 }
@@ -305,40 +303,34 @@ const Sleep: GameState<void, void> = {
 
 }
 
-const PlayerWin: GameState<void, void> = {
+const PlayerWin: GameState<void, boolean> = {
     stateName: "PLAYER_WIN",
-    expectedDuration: 1000 * 60 * 2,
+    expectedDuration: null,
     startTime: null,
     endTime: null,
+    // the result stays visible on the phone, the board is cleared right away so nobody has to wait
     action: async () => {
-
-        await waitForTimeout(PlayerWin.expectedDuration!);
-        if (GameManager.currentGameState === PlayerWin) {
-            GameManager.resetGame(false);
-        }
-
+        finishGame("player");
         return {
-            canContinue: false,
-            subsequentState: null
+            canContinue: true,
+            subsequentState: CleanUp,
+            output: false
         }
     }
 }
 
-const Tie: GameState<void, void> = {
+const Tie: GameState<void, boolean> = {
     stateName: "TIE",
-    expectedDuration: 1000 * 60 * 2,
+    expectedDuration: null,
     startTime: null,
     endTime: null,
+    // the result stays visible on the phone, the board is cleared right away so nobody has to wait
     action: async () => {
-
-        await waitForTimeout(Tie.expectedDuration!);
-        if (GameManager.currentGameState === Tie) {
-            GameManager.resetGame(false);
-        }
-
+        finishGame("tie");
         return {
-            canContinue: false,
-            subsequentState: null
+            canContinue: true,
+            subsequentState: CleanUp,
+            output: false
         }
     }
 }
@@ -385,6 +377,8 @@ GameManager = {
         GameManager.gameEvent.emit("stateChange");
         GameManager.currentGameState.endTime = new Date();
         GameManager.currentGameState = newState;
+        // back in IDLE the player's turn is over and the next one in the queue gets the offer
+        if (newState === Idle) releaseActivePlayer();
         newState.startTime = new Date();
         newState.stateData = newStateData;
         state.stateName = newState.stateName;
