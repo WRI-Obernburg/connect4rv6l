@@ -1,0 +1,64 @@
+MPR "TESTSEQUENZ"
+U_PROG Name:"reset4"
+\STOP
+C 
+C Rot greifen
+KOPIERE Quelle:21,Ziel_Var:I_Aktion
+U_PROG Name:"Aktion"
+\STOP
+C 
+C Einwerfen
+KOPIERE Quelle:0,Ziel_Var:IX_Schacht
+KOPIERE Quelle:31,Ziel_Var:I_Aktion
+U_PROG Name:"Aktion"
+\STOP
+C 
+C Rot greifen
+KOPIERE Quelle:21,Ziel_Var:I_Aktion
+U_PROG Name:"Aktion"
+\STOP
+C 
+C Einwerfen
+KOPIERE Quelle:6,Ziel_Var:IX_Schacht
+KOPIERE Quelle:31,Ziel_Var:I_Aktion
+U_PROG Name:"Aktion"
+\STOP
+C 
+C Entnahme 0 0
+KOPIERE Quelle:0,Ziel_Var:IX_FELD
+KOPIERE Quelle:0,Ziel_Var:IZ_FELD
+KOPIERE Quelle:41,Ziel_Var:I_Aktion
+U_PROG Name:"Aktion"
+\STOP
+C 
+C Palette Rot initialisieren
+KOPIERE Quelle:20,Ziel_Var:I_Aktion
+U_PROG Name:"Aktion"
+C 
+C Rot ablegen
+KOPIERE Quelle:22,Ziel_Var:I_Aktion
+U_PROG Name:"Aktion"
+\STOP
+C 
+C Entnahme 6 0
+KOPIERE Quelle:6,Ziel_Var:IX_FELD
+KOPIERE Quelle:0,Ziel_Var:IZ_FELD
+KOPIERE Quelle:41,Ziel_Var:I_Aktion
+U_PROG Name:"Aktion"
+\STOP
+C 
+C Rot ablegen
+KOPIERE Quelle:22,Ziel_Var:I_Aktion
+U_PROG Name:"Aktion"
+STOP
+C 
+C 
+KOPIERE Quelle:0,Ziel_Var:IX_FELD
+KOPIERE Quelle:0,Ziel_Var:IY_FELD
+KOPIERE Quelle:0,Ziel_Var:IZ_FELD
+KOPIERE Quelle:0,Ziel_Var:IX_Schacht
+KOPIERE Quelle:0,Ziel_Var:I_Aktion
+U_PROG Name:"Aktion"
+STOP
+C 
+END

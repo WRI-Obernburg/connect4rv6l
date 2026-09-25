@@ -1,0 +1,120 @@
+MPR "4GEWINNT"
+C Stand: 31.03.2026 / HB
+C 
+VAR Name:I_Aktion
+VAR Name:RvCP_greif
+VAR Name:RvCP_hoch
+VAR Name:IvPTP
+LOK_VAR Name:P1
+C 
+C Initialisierungen
+C ------------------
+PALETTE Prog_Name:"Palette_blau",#INIT
+PALETTE Prog_Name:"Palette_rot",#INIT
+PALETTE Prog_Name:"Palette_Schacht",#INIT
+PALETTE Prog_Name:"Palette_Feld",#INIT
+C 
+WERKZEUG Variable:T_Sauger
+KOPIERE Quelle:500,Ziel_Var:RvCP_hoch
+KOPIERE Quelle:50,Ziel_Var:RvCP_greif
+KOPIERE Quelle:50,Ziel_Var:IvPTP
+C 
+BEWEG_ART #PTP
+PTP_GESCHW [%]:IvPTP
+XPOS <XPOS Type="#N"><TCP_T Frame="$BASE"><x>9.68961894401751579e+02</x><y>-2.35301456058145249e+01</y><z>3.23866022834689943e+02</z></TCP_T><TCP_R Frame="$BASE"><rx>-1.79998923853498013e+02</rx><ry>-9.37039954642159348e-04</ry><rz>-8.99962710212599859e+01</rz></TCP_R><Axes><A1>-1.39086914062500333e+00</A1><A2>-9.45483398437502274e+01</A2><A3>9.87484130859377416e+01</A3><A4>-9.00009130245353361e+01</A4><A5>8.57988281249998295e+01</A5><A6>-1.39453124999999734e+00</A6></Axes><Teach_Tool_T><x>0.00000000000000000e+00</x><y>0.00000000000000000e+00</y><z>1.45000000000000000e+02</z></Teach_Tool_T><Teach_Tool_R><rx>0.00000000000000000e+00</rx><ry>-0.00000000000000000e+00</ry><rz>-0.00000000000000000e+00</rz></Teach_Tool_R><MRF_T><x>0.00000000000000000e+00</x><y>0.00000000000000000e+00</y><z>0.00000000000000000e+00</z></MRF_T><MRF_R><rx>0.00000000000000000e+00</rx><ry>-0.00000000000000000e+00</ry><rz>-0.00000000000000000e+00</rz></MRF_R></XPOS>
+C 
+BEWEG_ART #LINEAR
+BAHN_GESCHW [mm/s]:RvCP_hoch
+BAHN_BESCHL [%]:100
+C 
+C Kommandos vom PC auswerten
+C ---------------------------
+MARKE "Befehl quittieren"
+KOPIERE Quelle:0,Ziel_Var:I_Aktion
+C 
+C !!!!!!!!!!!!!!!!!!!!!!!!!!!
+C !!! Testwert fr I_Aktion !!!
+C !!!!!!!!!!!!!!!!!!!!!!!!!!!
+\KOPIERE Quelle:41,Ziel_Var:I_Aktion
+\KOPIERE Quelle:2,Ziel_Var:IX_FELD
+\KOPIERE Quelle:0,Ziel_Var:IZ_FELD
+\KOPIERE Quelle:2,Ziel_Var:IX_Schacht
+\C
+MARKE "Warte auf Kommando"
+C -------------------------
+TESTE #VARIABLE,Op_1:I_Aktion,#=,Op_2:10,Marke:"Palette Blau initialisieren"
+TESTE #VARIABLE,Op_1:I_Aktion,#=,Op_2:11,Marke:"Blau greifen"
+TESTE #VARIABLE,Op_1:I_Aktion,#=,Op_2:12,Marke:"Blau ablegen"
+TESTE #VARIABLE,Op_1:I_Aktion,#=,Op_2:20,Marke:"Palette Rot initialisieren"
+TESTE #VARIABLE,Op_1:I_Aktion,#=,Op_2:21,Marke:"Rot greifen"
+TESTE #VARIABLE,Op_1:I_Aktion,#=,Op_2:22,Marke:"Rot ablegen"
+TESTE #VARIABLE,Op_1:I_Aktion,#=,Op_2:31,Marke:"Chip in Schacht"
+TESTE #VARIABLE,Op_1:I_Aktion,#=,Op_2:41,Marke:"Feldentnahme"
+TESTE #VARIABLE,Op_1:I_Aktion,#=,Op_2:50,Marke:"Vakuum AUS"
+TESTE #VARIABLE,Op_1:I_Aktion,#=,Op_2:51,Marke:"Vakuum EIN"
+TESTE #VARIABLE,Op_1:I_Aktion,#=,Op_2:90,Marke:"REFPOS anfahren"
+SPRUNG Marke:"Warte auf Kommando"
+C 
+MARKE "Palette Blau initialisieren"
+C ---------------------------------
+PALETTE Prog_Name:"Palette_blau",#INIT
+SPRUNG Marke:"Befehl quittieren"
+C 
+MARKE "Blau greifen"
+C -----------------
+U_PROG Name:"Blau_greifen"
+SPRUNG Marke:"Befehl quittieren"
+C 
+MARKE "Palette Rot initialisieren"
+C ---------------------------------
+PALETTE Prog_Name:"Palette_rot",#INIT
+SPRUNG Marke:"Befehl quittieren"
+C 
+MARKE "Rot greifen"
+C -----------------
+U_PROG Name:"Rot_greifen"
+SPRUNG Marke:"Befehl quittieren"
+C 
+MARKE "Feldentnahme"
+C ------------------
+U_PROG Name:"Feldentnahme"
+SPRUNG Marke:"Befehl quittieren"
+C 
+MARKE "Chip in Schacht"
+C ---------------------
+U_PROG Name:"Chip_in_Schacht"
+SPRUNG Marke:"Befehl quittieren"
+C 
+MARKE "Blau ablegen"
+C ---------------
+\XPOS <XPOS Type="#N"><TCP_T Frame="$BASE"><x>5.15745970128774843e+02</x><y>1.94117267967909982e+02</y><z>5.66093236605634161e+02</z></TCP_T><TCP_R Frame="$BASE"><rx>1.78016093188149739e+02</rx><ry>2.72259400490538588e-02</ry><rz>-1.79982107961603049e+02</rz></TCP_R><Axes><A1>1.98336181640625497e+01</A1><A2>-1.29910583496094063e+02</A2><A3>1.03494506835937756e+02</A3><A4>-8.79393997317523883e+01</A4><A5>1.15705078124999773e+02</A5><A6>1.10718749999999787e+02</A6></Axes><Teach_Tool_T><x>0.00000000000000000e+00</x><y>0.00000000000000000e+00</y><z>1.45000000000000000e+02</z></Teach_Tool_T><Teach_Tool_R><rx>0.00000000000000000e+00</rx><ry>-0.00000000000000000e+00</ry><rz>-0.00000000000000000e+00</rz></Teach_Tool_R><MRF_T><x>0.00000000000000000e+00</x><y>0.00000000000000000e+00</y><z>0.00000000000000000e+00</z></MRF_T><MRF_R><rx>0.00000000000000000e+00</rx><ry>-0.00000000000000000e+00</ry><rz>-0.00000000000000000e+00</rz></MRF_R></XPOS>
+U_PROG Name:"BLAU_ABLEGEN"
+SPRUNG Marke:"Befehl quittieren"
+C 
+MARKE "Rot ablegen"
+C ---------------
+U_PROG Name:"ROT_ABLEGEN"
+SPRUNG Marke:"Befehl quittieren"
+C 
+MARKE "Vakuum AUS"
+C ----------------
+SCHR_BIT #AUSGANG,Pegel:0,Byte:20,Bit_Nr:0
+SPRUNG Marke:"Befehl quittieren"
+C 
+MARKE "Vakuum EIN"
+C ----------------
+SCHR_BIT #AUSGANG,Pegel:1,Byte:20,Bit_Nr:0
+SPRUNG Marke:"Befehl quittieren"
+C 
+C 
+MARKE "REFPOS anfahren"
+C ---------------
+BEWEG_ART #PTP
+XPOS <XPOS Type="#N"><TCP_T Frame="$BASE"><x>1.23499999904264769e+03</x><y>-6.63858961893662117e-07</y><z>6.15012831110093543e+02</z></TCP_T><TCP_R Frame="$BASE"><rx>-8.99946899413282182e+01</rx><ry>-9.98880872509032638e-03</ry><rz>-9.00000011026560003e+01</rz></TCP_R><Axes><A1>0.00000000000000000e+00</A1><A2>-9.00000000000002132e+01</A2><A3>9.00005493164064632e+01</A3><A4>-8.99982700587753612e+01</A4><A5>-5.85937499999998872e-03</A5><A6>-1.17187499999999774e-02</A6></Axes><Teach_Tool_T><x>0.00000000000000000e+00</x><y>0.00000000000000000e+00</y><z>1.25000000000000000e+02</z></Teach_Tool_T><Teach_Tool_R><rx>0.00000000000000000e+00</rx><ry>-0.00000000000000000e+00</ry><rz>-0.00000000000000000e+00</rz></Teach_Tool_R><MRF_T><x>0.00000000000000000e+00</x><y>0.00000000000000000e+00</y><z>0.00000000000000000e+00</z></MRF_T><MRF_R><rx>0.00000000000000000e+00</rx><ry>-0.00000000000000000e+00</ry><rz>-0.00000000000000000e+00</rz></MRF_R></XPOS>
+STOP
+SPRUNG Marke:"Befehl quittieren"
+C 
+MARKE "STOP"
+C ----------
+STOP
+END
