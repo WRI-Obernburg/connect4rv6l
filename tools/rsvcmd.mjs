@@ -39,7 +39,8 @@ export async function connect({
         socket.once("error", reject);
     });
     socket.on("error", (err) => pending?.reject(err));
-    socket.write("RSVCMD_SESSION / \n");
+    // the manual names RSVCMD_SESSION, but the controller at the WRI only answers to SYMTABLE_SESSION
+    socket.write(`${process.env.RSV_SESSION || "SYMTABLE_SESSION"} / \n`);
 
     function sendNow(body) {
         return new Promise((resolve, reject) => {

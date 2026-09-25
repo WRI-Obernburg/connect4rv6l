@@ -7,13 +7,15 @@ import {Checkbox} from "@/components/ui/checkbox";
 import {TelemetryValue} from "@/app/models/GameData";
 import {WebsocketSendContext, WebsocketSubscribeContext} from "@/provider/WebsocketProvider";
 
-const GROUP_ORDER = ["Störungen", "Programm", "Bewegung", "Ein-/Ausgänge", "SPS-Rohwerte"];
+const GROUP_ORDER = ["Störungen", "Steuerung", "Programm", "Bewegung", "Ein-/Ausgänge", "SPS-Rohwerte"];
 
 export function RobotTelemetry(props: { telemetry?: { updatedAt: string | null, values: TelemetryValue[] }, connected: boolean, mock: boolean }) {
     const now = useNow();
     const values = props.telemetry?.values ?? [];
     const age = props.telemetry?.updatedAt ? Math.round((now - new Date(props.telemetry.updatedAt).getTime()) / 1000) : null;
-    const alarms = values.filter((v) => v.available && v.alarm);
+    const active = values.filter((v) => v.available && v.alarm);
+    const faults = active.filter((v) => v.severity === "fatal");
+    const warnings = active.filter((v) => v.severity !== "fatal");
 
     let status = age === null ? "Noch keine Werte gelesen" : `Stand vor ${age} s`;
     if (props.mock) status = "Mock-Modus: keine echten Werte vom Roboter";
@@ -24,10 +26,16 @@ export function RobotTelemetry(props: { telemetry?: { updatedAt: string | null, 
         <CardHeader>
             <CardTitle>Robotertelemetrie</CardTitle>
             <p className={"text-sm text-gray-500"}>{status}. Wird jede Sekunde von der Steuerung gelesen.</p>
-            {alarms.length > 0 && <div className={"mt-2 rounded-md bg-red-500 p-3 text-white"}>
-                <p className={"font-bold"}>{alarms.length === 1 ? "1 aktive Störung" : `${alarms.length} aktive Störungen`}</p>
+            {faults.length > 0 && <div className={"mt-2 rounded-md bg-red-500 p-3 text-white"}>
+                <p className={"font-bold"}>{faults.length === 1 ? "1 Störung" : `${faults.length} Störungen`}</p>
                 <ul className={"list-disc pl-5"}>
-                    {alarms.map((a) => <li key={a.id}>{a.label}</li>)}
+                    {faults.map((a) => <li key={a.id}>{a.alarmText ?? a.label}</li>)}
+                </ul>
+            </div>}
+            {warnings.length > 0 && <div className={"mt-2 rounded-md bg-yellow-100 p-3 text-yellow-900"}>
+                <p className={"font-bold"}>{warnings.length === 1 ? "1 Warnung" : `${warnings.length} Warnungen`}</p>
+                <ul className={"list-disc pl-5"}>
+                    {warnings.map((a) => <li key={a.id}>{a.alarmText ?? a.label}</li>)}
                 </ul>
             </div>}
         </CardHeader>
@@ -67,7 +75,9 @@ function ValueDisplay({item}: { item: TelemetryValue }) {
         </span>;
     }
     if (item.kind === "bits") return <span className={"text-sm font-mono"}>{String(item.value)}</span>;
-    return <span className={"text-sm font-mono"}>{formatNumber(item.value)}{item.unit ? ` ${item.unit}` : ""}</span>;
+    if (item.kind === "text") return <span className={"text-sm font-mono"}>{String(item.value) || "–"}</span>;
+    const alarmColor = item.alarm ? (item.severity === "fatal" ? "text-red-600 font-bold" : "text-yellow-600 font-bold") : "";
+    return <span className={`text-sm font-mono ${alarmColor}`}>{formatNumber(item.value)}{item.unit ? ` ${item.unit}` : ""}</span>;
 }
 
 // Bit 0 on the right like in the controller's documentation

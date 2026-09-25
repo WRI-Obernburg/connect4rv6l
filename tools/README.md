@@ -10,6 +10,8 @@ Hilfsprogramme, die direkt über die RSVCMD-XML-Schnittstelle mit der Roboterste
 
 ## Ausführen
 
+Die Steuerung am WRI versteht als Sitzungsbefehl nur `SYMTABLE_SESSION` (das Handbuch nennt `RSVCMD_SESSION`). Eine zweite Verbindung parallel zum laufenden Backend ist möglich.
+
 Die Steuerung nimmt XML-Befehle nur von der IP an, die in `S:/$CONFIG/$CNF/PROTECT` unter `OP_XML_PASS` eingetragen ist. Die Tools laufen deshalb auf dem Backend-Pi.
 
 ```bash
@@ -58,6 +60,7 @@ In T1/T2 reagiert die Steuerung nicht auf Fernbefehle. Der Test ist deshalb nur 
 Ablauf:
 
 1. Nach Bestätigung schreibt das Tool `I_Aktion = 90`, der Roboter fährt in die Referenzposition.
+   Achtung: Im Roboterprogramm `4GEWINNT` endet Aktion 90 selbst mit `STOP`. Der Stopp über die Schnittstelle muss deshalb deutlich vor dem Erreichen der Referenzposition kommen, sonst lässt sich nicht unterscheiden, welcher Stopp gewirkt hat.
 2. Sobald er fährt, Enter drücken. Das Tool sendet sofort `_IPLC[243] OR 4` (Programmstopp laut Handbuch Kap. 9.2.19.4).
 3. Das Tool zeichnet die nächsten 5 Sekunden auf und fragt, ob der Roboter angehalten hat.
 4. Es meldet, ob das STOP-Bit von selbst zurückfällt oder gesetzt bleibt.

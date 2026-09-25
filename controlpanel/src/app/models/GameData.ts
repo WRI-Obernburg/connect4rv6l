@@ -21,12 +21,13 @@ export interface TelemetryValue {
     group: string
     label: string
     symbol: string
-    kind: "number" | "flag" | "position" | "bits"
+    kind: "number" | "flag" | "position" | "bits" | "text"
     unit?: string
     note?: string
     available: boolean
     value: number | string | null
     alarm: boolean
+    alarmText?: string
     severity?: "fatal" | "warning"
     position?: { x: number, y: number, z: number, axes: number[] }
 }

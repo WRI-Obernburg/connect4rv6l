@@ -19,11 +19,19 @@ type TelemetryItem = {
     label: string,
     symbol: string,
     bit?: number,
-    kind: "number" | "flag" | "position" | "bits",
+    kind: "number" | "flag" | "position" | "bits" | "text",
     unit?: string,
     // value of a flag that means something is wrong
     alarmWhen?: 0 | 1,
+    // for numbers: alarm when the value is one of these
+    alarmValues?: number[],
+    // for numbers: alarm when the value is not 0
+    alarmWhenNotZero?: boolean,
+    // for numbers: alarm when the value is at or below this limit
+    alarmAtOrBelow?: number,
     severity?: Severity,
+    // describes the problem, e.g. "Roboterprogramm läuft nicht" instead of the item's label
+    alarmText?: string,
     note?: string,
 };
 
@@ -38,6 +46,7 @@ export type TelemetryValue = {
     available: boolean,
     value: number | string | null,
     alarm: boolean,
+    alarmText?: string,
     severity?: Severity,
     position?: { x: number, y: number, z: number, axes: number[] },
 };
@@ -45,21 +54,39 @@ export type TelemetryValue = {
 const flag = (byte: number, bit: number) => ({ symbol: `_IPLC[${Math.floor(byte / 4) + 1}]`, bit: (byte % 4) * 8 + bit });
 
 const ITEMS: TelemetryItem[] = [
-    { id: "program_running", group: "Programm", label: "Roboterprogramm läuft (M935.6)", ...flag(935, 6), kind: "flag", alarmWhen: 0, severity: "warning" },
+    { id: "drives", group: "Steuerung", label: "Antriebe", symbol: "_SSTATUS_TEXT[1]", kind: "text", note: "RP_STATUS_DRIVE_ON = Antriebe ein" },
+    { id: "user_level", group: "Steuerung", label: "Benutzerlevel", symbol: "_SSTATUS_TEXT[2]", kind: "text" },
+    { id: "selected_program", group: "Steuerung", label: "Angewähltes Programm", symbol: "_SPROGRAM[1]", kind: "text", note: "Für das Spiel muss 4GEWINNT laufen" },
+    { id: "override_auto", group: "Steuerung", label: "Override Automatik", symbol: "_IAUTO_OVER", kind: "number", unit: "%" },
+    { id: "override_manual", group: "Steuerung", label: "Override Hand", symbol: "_IMAN_OVER", kind: "number", unit: "%" },
+    { id: "brakes", group: "Steuerung", label: "Status Bremsen", symbol: "_ISTATUS_OF_BRAKES", kind: "bits" },
+    { id: "safety_controller", group: "Steuerung", label: "Safety-Controller Status", symbol: "_ISC_STATUS_INTERN", kind: "bits" },
+    { id: "ups", group: "Steuerung", label: "USV-Status", symbol: "_IUPS_STATUS", kind: "bits" },
+
+    { id: "program_running", group: "Programm", label: "Roboterprogramm läuft (M935.6)", ...flag(935, 6), kind: "flag", alarmWhen: 0, severity: "warning", alarmText: "Roboterprogramm läuft nicht" },
     { id: "start_request", group: "Programm", label: "Start-Anforderung (M968.1)", ...flag(968, 1), kind: "flag" },
     { id: "stop_request", group: "Programm", label: "Stopp-Anforderung (M968.2)", ...flag(968, 2), kind: "flag" },
+    // total part counters of the pallets (PALETTE_BLAU/ROT.MPR): 21 after #INIT, every PALETTE #EIN counts
+    // down by one, for gripping as well as for putting a chip back. At 0 the pallet silently starts over.
+    { id: "pallet_blue", group: "Programm", label: "Palette blau, Zähler der Steuerung (I_blau)", symbol: "I_blau", kind: "number", alarmAtOrBelow: 0, severity: "warning", alarmText: "Palette blau leer, Zähler I_blau ist {value}" },
+    { id: "pallet_red", group: "Programm", label: "Palette rot, Zähler der Steuerung (I_rot)", symbol: "I_rot", kind: "number", alarmAtOrBelow: 0, severity: "warning", alarmText: "Palette rot leer, Zähler I_rot ist {value}" },
     { id: "action", group: "Programm", label: "Aktion (I_Aktion)", symbol: "I_Aktion", kind: "number", note: "0 = bereit" },
     { id: "column", group: "Programm", label: "Spalte (IX_Schacht)", symbol: "IX_Schacht", kind: "number" },
     { id: "field_x", group: "Programm", label: "Feld X (IX_Feld)", symbol: "IX_Feld", kind: "number" },
     { id: "field_z", group: "Programm", label: "Feld Z (IZ_Feld)", symbol: "IZ_Feld", kind: "number" },
 
-    { id: "collective_fault", group: "Störungen", label: "Sammelstörung (M1012.2)", ...flag(1012, 2), kind: "flag", alarmWhen: 1, severity: "fatal" },
-    { id: "compressed_air", group: "Störungen", label: "Druckluft", symbol: "", kind: "flag", alarmWhen: 0, severity: "fatal", note: "Eingang aus Maschinendatum IBIN_FUNC_IN[1]" },
-    { id: "collision", group: "Störungen", label: "Kollision erkannt (M970.3)", ...flag(970, 3), kind: "flag", alarmWhen: 1, severity: "fatal" },
-    { id: "collision_detection", group: "Störungen", label: "Kollisionserkennung aktiv (M970.2)", ...flag(970, 2), kind: "flag", alarmWhen: 0, severity: "warning" },
+    { id: "collective_fault", group: "Störungen", label: "Sammelstörung (M1012.2)", ...flag(1012, 2), kind: "flag", alarmWhen: 1, severity: "fatal", alarmText: "Sammelstörung aktiv" },
+    // the input of the pressure switch is set in the machine data IBIN_FUNC_IN[1], which cannot be read
+    // via the interface, so missing air is detected by the controller's message S19
+    { id: "compressed_air", group: "Störungen", label: "Druckluft fehlt (Meldung S19)", symbol: "_IACT_ERROR", kind: "number", alarmValues: [19], severity: "fatal", alarmText: "Druckluft fehlt (S19)" },
+    { id: "active_message", group: "Störungen", label: "Aktive Meldung der Steuerung (Nummer)", symbol: "_IACT_ERROR", kind: "number", alarmWhenNotZero: true, severity: "warning", alarmText: "Steuerung meldet #{value}", note: "Nummer in rsv-fehlermeldungen.pdf nachschlagen, z. B. 84 = USV-Batterie defekt" },
+    { id: "active_message_text", group: "Störungen", label: "Angezeigte Meldung", symbol: "_SDISP_ERROR", kind: "text" },
+    { id: "safety_controller_error", group: "Störungen", label: "Safety-Controller Fehler (_ISC_ERROR[1])", symbol: "_ISC_ERROR[1]", kind: "number", alarmWhenNotZero: true, severity: "fatal", alarmText: "Safety-Controller meldet Fehler {value}" },
+    { id: "collision", group: "Störungen", label: "Kollision erkannt (M970.3)", ...flag(970, 3), kind: "flag", alarmWhen: 1, severity: "fatal", alarmText: "Kollision erkannt" },
+    { id: "collision_detection", group: "Störungen", label: "Kollisionserkennung aktiv (M970.2)", ...flag(970, 2), kind: "flag", alarmWhen: 0, severity: "warning", alarmText: "Kollisionserkennung ist ausgeschaltet" },
     ...[1, 2, 3, 4, 5, 6].map((axis): TelemetryItem => ({
         id: `collision_axis_${axis}`, group: "Störungen", label: `Kollision Achse ${axis} (M1592.${axis - 1})`,
-        ...flag(1592, axis - 1), kind: "flag", alarmWhen: 1, severity: "fatal",
+        ...flag(1592, axis - 1), kind: "flag", alarmWhen: 1, severity: "fatal", alarmText: `Kollision an Achse ${axis}`,
     })),
 
     { id: "position", group: "Bewegung", label: "Istposition (_PACTPOS)", symbol: "_PACTPOS", kind: "position" },
@@ -70,7 +97,9 @@ const ITEMS: TelemetryItem[] = [
         id: `current_axis_${axis}`, group: "Bewegung", label: `Motorstrom Achse ${axis}`, symbol: `_RCURR_ACT[${axis}]`, kind: "number",
     })),
 
-    { id: "gripper", group: "Ein-/Ausgänge", label: "Greifer (_IBIN_OUT[6])", symbol: "_IBIN_OUT[6]", kind: "number" },
+    // the robot program switches the vacuum with SCHR_BIT #AUSGANG Byte 20 Bit 0, which is bit 0 of _IBIN_OUT[6]
+    { id: "vacuum", group: "Ein-/Ausgänge", label: "Vakuum Sauger (Ausgang Byte 20 Bit 0)", symbol: "_IBIN_OUT[6]", bit: 0, kind: "flag" },
+    { id: "outputs_6", group: "Ein-/Ausgänge", label: "Ausgänge (_IBIN_OUT[6], Byte 20 bis 23)", symbol: "_IBIN_OUT[6]", kind: "bits" },
     { id: "inputs_1", group: "Ein-/Ausgänge", label: "Eingänge (_IBIN_IN[1])", symbol: "_IBIN_IN[1]", kind: "bits" },
     { id: "inputs_2", group: "Ein-/Ausgänge", label: "Eingänge (_IBIN_IN[2])", symbol: "_IBIN_IN[2]", kind: "bits" },
     { id: "outputs_1", group: "Ein-/Ausgänge", label: "Ausgänge (_IBIN_OUT[1])", symbol: "_IBIN_OUT[1]", kind: "bits" },
@@ -129,7 +158,6 @@ async function poll() {
         // new connection: the controller may have changed, check everything again
         wasConnected = true;
         unavailable = new Set();
-        await resolveCompressedAirInput();
         lastAvailabilityCheck = 0;
     }
 
@@ -146,7 +174,8 @@ async function poll() {
         await checkAvailability([...unavailable]);
     }
 
-    values = ITEMS.map((item) => toValue(item, item.symbol in raw ? raw[item.symbol] : undefined));
+    values = ITEMS.map((item) => toValue(item, item.symbol in raw ? raw[item.symbol] : undefined))
+        .map((value) => withBackendChipCount(value));
     updatedAt = new Date().toISOString();
     reportAlarms();
     sendStateToControlPanelClient?.();
@@ -165,28 +194,19 @@ async function checkAvailability(symbols: string[]) {
     }
 }
 
-// The input of the compressed air switch is configured in the machine data IBIN_FUNC_IN[1]
-async function resolveCompressedAirInput() {
-    const item = ITEMS.find((i) => i.id === "compressed_air")!;
-    try {
-        const input = parseInt(await readSymbol("IBIN_FUNC_IN[1]", true));
-        if (input > 0) {
-            // assumption: inputs are numbered from 1 in 32 bit fields of _IBIN_IN, to be confirmed on the robot
-            item.symbol = `_IBIN_IN[${Math.floor((input - 1) / 32) + 1}]`;
-            item.bit = (input - 1) % 32;
-            item.label = `Druckluft (Eingang ${input})`;
-            item.note = `Eingang ${input} aus Maschinendatum IBIN_FUNC_IN[1], Zuordnung zu ${item.symbol} Bit ${item.bit} noch ungeprüft`;
-        } else {
-            item.symbol = "";
-            item.note = "Kein Druckluft-Eingang in IBIN_FUNC_IN[1] konfiguriert";
-        }
-    } catch (error) {
-        item.symbol = "";
-        item.note = `IBIN_FUNC_IN[1] nicht lesbar: ${error}`;
-    }
+// The backend keeps its own chip count, show it next to the controller's counter so drift is visible
+function withBackendChipCount(value: TelemetryValue): TelemetryValue {
+    if (value.id === "pallet_blue") return { ...value, note: `Backend zählt ${RV6L_STATE.blueChipsLeft} blaue Chips` };
+    if (value.id === "pallet_red") return { ...value, note: `Backend zählt ${RV6L_STATE.redChipsLeft} rote Chips` };
+    return value;
 }
 
 function toValue(item: TelemetryItem, raw: string | undefined): TelemetryValue {
+    const value = toRawValue(item, raw);
+    return value.alarm ? { ...value, alarmText: (item.alarmText ?? item.label).replace("{value}", String(value.value)) } : value;
+}
+
+function toRawValue(item: TelemetryItem, raw: string | undefined): TelemetryValue {
     const base: TelemetryValue = {
         id: item.id, group: item.group, label: item.label, symbol: item.symbol, kind: item.kind,
         unit: item.unit, note: item.note, severity: item.severity,
@@ -210,11 +230,18 @@ function toValue(item: TelemetryItem, raw: string | undefined): TelemetryValue {
             },
         };
     }
+    if (item.kind === "text") {
+        return { ...base, value: raw.replace(/^<!\[CDATA\[|\]\]>$/g, "").trim() };
+    }
     if (item.kind === "bits") {
         return { ...base, value: Number(raw) >>> 0 };
     }
     const number = Number(raw);
-    return { ...base, value: Number.isNaN(number) ? raw : number };
+    if (Number.isNaN(number)) return { ...base, value: raw };
+    const alarm = (item.alarmValues?.includes(number) ?? false)
+        || (item.alarmWhenNotZero === true && number !== 0)
+        || (item.alarmAtOrBelow !== undefined && number <= item.alarmAtOrBelow);
+    return { ...base, value: number, alarm };
 }
 
 function reportAlarms() {
@@ -226,7 +253,7 @@ function reportAlarms() {
         logEvent({
             // fatal alarms also switch the game into the ERROR state
             errorType: value.alarm ? (value.severity === "fatal" ? ErrorType.FATAL : ErrorType.WARNING) : ErrorType.INFO,
-            description: value.alarm ? `RV6L: ${value.label} meldet Störung` : `RV6L: ${value.label} wieder in Ordnung`,
+            description: value.alarm ? `RV6L: ${value.alarmText}` : `RV6L: ${value.label} wieder in Ordnung`,
             date: new Date().toString()
         });
     }
