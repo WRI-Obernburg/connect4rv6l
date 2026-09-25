@@ -1,6 +1,6 @@
 MPR "PALETTE_ROT"
 C 
-C Teilezhler
+C Teilezähler
 C ============
 VAR Name:I_rot
 LOK_VAR Name:IX
@@ -13,7 +13,7 @@ LOK_VAR Name:VDX
 LOK_VAR Name:VDY
 LOK_VAR Name:VDZ
 C 
-C Stckzahlen
+C Stückzahlen
 C ============
 LOK_KONST Name:I_Teile_X,Wert:3
 LOK_KONST Name:I_Teile_Y,Wert:7

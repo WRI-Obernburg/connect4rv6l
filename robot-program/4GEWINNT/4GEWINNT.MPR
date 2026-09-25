@@ -33,7 +33,7 @@ MARKE "Befehl quittieren"
 KOPIERE Quelle:0,Ziel_Var:I_Aktion
 C 
 C !!!!!!!!!!!!!!!!!!!!!!!!!!!
-C !!! Testwert fr I_Aktion !!!
+C !!! Testwert für I_Aktion !!!
 C !!!!!!!!!!!!!!!!!!!!!!!!!!!
 \KOPIERE Quelle:41,Ziel_Var:I_Aktion
 \KOPIERE Quelle:2,Ziel_Var:IX_FELD

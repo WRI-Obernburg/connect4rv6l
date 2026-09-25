@@ -18,6 +18,10 @@ const robot = await connect().catch((err) => {
     process.exit(1);
 });
 
+// The controller stores programs in the DOS code page 850 ("Ü" is 0x9A); save them as UTF-8
+const CP850_HIGH = "ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜø£Ø×ƒáíóúñÑªº¿®¬½¼¡«»░▒▓│┤ÁÂÀ©╣║╗╝¢¥┐└┴┬├─┼ãÃ╚╔╩╦╠═╬¤ðÐÊËÈıÍÎÏ┘┌█▄¦Ì▀ÓßÔÒõÕµþÞÚÛÙýÝ¯´\u00AD±‗¾¶§÷¸°¨·¹³²■\u00A0";
+const decodeCp850 = (bytes) => Array.from(bytes, (b) => b < 0x80 ? String.fromCharCode(b) : CP850_HIGH[b - 0x80]).join("");
+
 async function listPrograms() {
     const response = await robot.send("<symbolApi><getSymbolList><program/></getSymbolList></symbolApi>");
     return [...response.matchAll(/<symbol>\s*<name>([\s\S]*?)<\/name>\s*<prog>([\s\S]*?)<\/prog>/g)]
@@ -29,7 +33,7 @@ async function downloadProgram(name) {
     const base64 = /<src>([\s\S]*?)<\/src>/.exec(response)?.[1]?.replace(/\s/g, "");
     if (!base64) throw new Error("No source in the response");
     const file = path.join(OUT_DIR, name.replace(/^[A-Za-z]:\//, "").replace(/[\\/:$]/g, "_") + ".txt");
-    fs.writeFileSync(file, Buffer.from(base64, "base64"));
+    fs.writeFileSync(file, decodeCp850(Buffer.from(base64, "base64")));
     return file;
 }
 
