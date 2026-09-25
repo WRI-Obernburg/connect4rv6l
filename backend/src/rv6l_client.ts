@@ -9,6 +9,11 @@ var client = new net.Socket();
 const parser = new XMLParser();
 const incommingStream = new stream.PassThrough();
 
+// TCP has no message boundaries: a response can arrive split over several chunks,
+// so unfinished data is kept here until its closing tag arrives
+const RESPONSE_END = '</RSVRES>';
+let receiveBuffer = '';
+
 export let RV6L_STATE = {
     globalMessageCounter: 0,
     rv6l_connected: false,
@@ -49,9 +54,9 @@ export function interruptRV6LAction() {
         description: "Interrupting RV6L action",
         date: new Date().toString()
     })
-    abortSignal.emit('abort'); // Emit the abort signal to cancel any ongoing operations
-    RV6L_STATE.rv6l_moving = false;
-    sendStateToControlPanelClient?.();
+    // Only stops waiting in this process, the robot itself finishes its current movement.
+    // The running action rejects and releases its lock; the next command waits until I_Aktion is 0 again.
+    abortSignal.emit('abort');
 }
 
 export async function initRV6LClient() {
@@ -64,6 +69,8 @@ export async function initRV6LClient() {
         return;
     }
     client = new net.Socket();
+    client.setEncoding('utf8'); // don't split multi-byte characters between chunks
+    receiveBuffer = '';
     try {
         const ROBOT_HOST = process.env.ROBOT_HOST || '192.168.2.1';
         const ROBOT_PORT = parseInt(process.env.ROBOT_PORT || '80');
@@ -89,17 +96,24 @@ export async function initRV6LClient() {
         });
 
         client.on('data', function (data) {
-            //seperate data string after </RSVRES> and process each
-            const dataString = data.toString();
-            const messages = dataString.split('</RSVRES>');
-            messages.forEach((message) => {
-                if (message.trim()) { // Check if the message is not empty
-                    const completeMessage = message + '</RSVRES>';
-                    const jsonObj = parser.parse(completeMessage);
-                    incommingStream.write(JSON.stringify(jsonObj)); // Write the complete message to the stream
-                }
-            });
+            receiveBuffer += data.toString();
 
+            // process every complete response, keep the incomplete rest for the next chunk
+            let end;
+            while ((end = receiveBuffer.indexOf(RESPONSE_END)) !== -1) {
+                const completeMessage = receiveBuffer.slice(0, end + RESPONSE_END.length);
+                receiveBuffer = receiveBuffer.slice(end + RESPONSE_END.length);
+                try {
+                    const jsonObj = parser.parse(completeMessage);
+                    incommingStream.write(JSON.stringify(jsonObj));
+                } catch (e) {
+                    logEvent({
+                        errorType: ErrorType.WARNING,
+                        description: `Could not parse RV6L response: ${completeMessage}`,
+                        date: new Date().toString()
+                    });
+                }
+            }
         });
 
         client.on('close', async function () {
@@ -137,203 +151,141 @@ export async function initRV6LClient() {
 }
 
 
-export async function moveToBlue() {
-
-    startAction("MoveToBlue");
-
-    if (RV6L_STATE.mock) {
-        await wait(1000); // Simulate delay for mock
-    } else {
-        try {
-            await writeVariableInProc("I_Aktion", "11");
-            await movementDone();
-        } catch (error) {
-            logEvent({
-                errorType: ErrorType.FATAL,
-                description: "Couldn't complete blue chip graping",
-                date: new Date().toString()
-            });
-        }
+export class RV6LBusyError extends Error {
+    constructor() {
+        super("RV6L is already executing an action");
+        this.name = "RV6LBusyError";
     }
-
-    RV6L_STATE.blueChipsLeft--;
-
-    stopAction("MoveToBlue");
 }
 
-export async function moveToRed() {
-
-    startAction("MoveToRed");
-    if (RV6L_STATE.mock) {
-        await wait(1000); // Simulate delay for mock
-    } else {
-        try {
-            await writeVariableInProc("I_Aktion", "21");
-            await movementDone();
-        } catch (error) {
-            logEvent({
-                errorType: ErrorType.FATAL,
-                description: "Couldn't complete red chip graping",
-                date: new Date().toString()
-            });
-        }
+/**
+ * Runs one robot action. Only one action may run at a time, and a command is only sent
+ * when the robot reports that it has finished its previous movement (I_Aktion == 0).
+ * Errors are passed on to the caller so the game stops instead of sending the next command.
+ */
+async function runAction(actionName: string, robotSteps: () => Promise<void>) {
+    if (RV6L_STATE.rv6l_moving) {
+        logEvent({
+            errorType: ErrorType.WARNING,
+            description: `Rejected ${actionName}: RV6L is busy with ${RV6L_STATE.state}`,
+            date: new Date().toString()
+        });
+        throw new RV6LBusyError();
     }
 
-    RV6L_STATE.redChipsLeft--;
-
-    stopAction("MoveToRed");
-}
-
-export async function moveToColumn(column: number) {
-
-    if (column != 1) {
-        //throw new Error("Only column 1 is supported at the moment");
-    }
-
-    if (column < 0 || column > 6) {
-        throw new Error("Column must be between 0 and 6");
-    }
-
-
-    startAction("MoveToColumn" + column);
-
-    if (RV6L_STATE.mock) {
-        await wait(1000); // Simulate delay for mock
-    } else {
-        try {
-            await writeVariableInProc("IX_Schacht", column.toString());
-            await writeVariableInProc("I_Aktion", "31");
-            await movementDone();
-        } catch (error) {
-            logEvent({
-                errorType: ErrorType.FATAL,
-                description: "Couldn't complete move to column " + column,
-                date: new Date().toString()
-            });
-        }
-    }
-
-    stopAction("MoveToColumn" + column);
-}
-
-export async function initChipPalletizing() {
-
-    startAction("InitChipPalletizing");
-
-    if (RV6L_STATE.mock) {
-        await wait(1000); // Simulate delay for mock
-    } else {
-        try {
-            await writeVariableInProc("I_Aktion", "10");
-            await movementDone()
-            await writeVariableInProc("I_Aktion", "20");
-            await movementDone()
-        } catch (error) {
-            logEvent({
-                errorType: ErrorType.FATAL,
-                description: "Couldn't complete chip palletizing initialization",
-                date: new Date().toString()
-            });
-        }
-    }
-
-    RV6L_STATE.blueChipsLeft = 21;
-    RV6L_STATE.redChipsLeft = 21;
-    stopAction("InitChipPalletizing");
-}
-
-export async function moveToRefPosition() {
-    startAction("MoveToRefPosition");
-    if (RV6L_STATE.mock) {
-        await wait(1000); // Simulate delay for mock
-    } else {
-        try {
-            await writeVariableInProc("I_Aktion", "90");
-            await movementDone();
-        } catch (error) {
-            logEvent({
-                errorType: ErrorType.FATAL,
-                description: "Couldn't complete move to reference position",
-                date: new Date().toString()
-            });
-        }
-    }
-
-    stopAction("MoveToRefPosition");
-}
-
-export async function removeFromField(x: number, y:number) {
-    startAction("RemoveFromField");
-    if( RV6L_STATE.mock) {
-        await wait(1000); // Simulate delay for mock
-    }else {
-        try {
-            await writeVariableInProc("IX_Feld", x.toString());
-            await writeVariableInProc("IZ_Feld", y.toString());
-            await writeVariableInProc("I_Aktion", "41");
-            await movementDone();
-        } catch (error) {
-            logEvent({
-                errorType: ErrorType.FATAL,
-                description: "Couldn't complete remove from field at position X:" + x + " Y:" + y,
-                date: new Date().toString()
-            });
-        }
-    }
-
-    stopAction("RemoveFromField");
-}
-
-export async function putBackToBlue() {
-    startAction("PutBackToBlue");
-    if( RV6L_STATE.mock) {
-        await wait(1000); // Simulate delay for mock
-    }else {
-        try {
-            await writeVariableInProc("I_Aktion", "12");
-            await movementDone();
-        } catch (error) {
-            logEvent({
-                errorType: ErrorType.FATAL,
-                description: "Couldn't complete put back to blue",
-                date: new Date().toString()
-            });
-        }
-    }
-    RV6L_STATE.blueChipsLeft++;
-    stopAction("PutBackToBlue");
-}
-
-export async function putBackToRed() {
-    startAction("PutBackToRed");
-    if( RV6L_STATE.mock) {
-        await wait(1000); // Simulate delay for mock
-    }else {
-        try {
-            await writeVariableInProc("I_Aktion", "22");
-            await movementDone();
-        } catch (error) {
-            logEvent({
-                errorType: ErrorType.FATAL,
-                description: "Couldn't complete put back to red",
-                date: new Date().toString()
-            });
-        }
-    }
-    RV6L_STATE.redChipsLeft++;
-    stopAction("PutBackToRed");
-}
-
-async function movementDone() {
+    startAction(actionName);
     try {
-        await waitForVariablePolling("I_Aktion", "0");
+        if (RV6L_STATE.mock) {
+            await wait(1000); // Simulate delay for mock
+        } else {
+            await ensureRobotReady();
+            await robotSteps();
+        }
+        stopAction(actionName);
     } catch (error) {
         logEvent({
             errorType: ErrorType.FATAL,
-            description: "Error while waiting for movement to complete",
+            description: `Couldn't complete ${actionName}: ${error}`,
             date: new Date().toString()
         });
+        throw error;
+    } finally {
+        // release the lock; if the robot is still moving, ensureRobotReady blocks the next command
+        if (RV6L_STATE.state === actionName) {
+            RV6L_STATE.state = "IDLE";
+            RV6L_STATE.rv6l_moving = false;
+            sendStateToControlPanelClient?.();
+        }
     }
+}
+
+async function ensureRobotReady() {
+    if (!RV6L_STATE.rv6l_connected) {
+        throw new Error("RV6L is not connected");
+    }
+    const currentAction = await readVariableInProc("I_Aktion");
+    if (String(currentAction) !== "0") {
+        throw new Error(`RV6L is not ready, I_Aktion is ${currentAction}`);
+    }
+}
+
+export async function moveToBlue() {
+    await runAction("MoveToBlue", async () => {
+        await writeVariableInProc("I_Aktion", "11");
+        await movementDone();
+    });
+    RV6L_STATE.blueChipsLeft--;
+}
+
+export async function moveToRed() {
+    await runAction("MoveToRed", async () => {
+        await writeVariableInProc("I_Aktion", "21");
+        await movementDone();
+    });
+    RV6L_STATE.redChipsLeft--;
+}
+
+export async function moveToColumn(column: number) {
+    if (!Number.isInteger(column) || column < 0 || column > 6) {
+        throw new Error("Column must be an integer between 0 and 6");
+    }
+
+    await runAction("MoveToColumn" + column, async () => {
+        await writeVariableInProc("IX_Schacht", column.toString());
+        await writeVariableInProc("I_Aktion", "31");
+        await movementDone();
+    });
+}
+
+export async function initChipPalletizing() {
+    await runAction("InitChipPalletizing", async () => {
+        await writeVariableInProc("I_Aktion", "10");
+        await movementDone();
+        await writeVariableInProc("I_Aktion", "20");
+        await movementDone();
+    });
+    RV6L_STATE.blueChipsLeft = 21;
+    RV6L_STATE.redChipsLeft = 21;
+}
+
+export async function moveToRefPosition() {
+    await runAction("MoveToRefPosition", async () => {
+        await writeVariableInProc("I_Aktion", "90");
+        await movementDone();
+    });
+}
+
+export async function removeFromField(x: number, y:number) {
+    if (!Number.isInteger(x) || x < 0 || x > 6 || !Number.isInteger(y) || y < 0 || y > 5) {
+        throw new Error("Field position must be integers with x between 0 and 6 and y between 0 and 5");
+    }
+
+    await runAction("RemoveFromField", async () => {
+        await writeVariableInProc("IX_Feld", x.toString());
+        await writeVariableInProc("IZ_Feld", y.toString());
+        await writeVariableInProc("I_Aktion", "41");
+        await movementDone();
+    });
+}
+
+export async function putBackToBlue() {
+    await runAction("PutBackToBlue", async () => {
+        await writeVariableInProc("I_Aktion", "12");
+        await movementDone();
+    });
+    RV6L_STATE.blueChipsLeft++;
+}
+
+export async function putBackToRed() {
+    await runAction("PutBackToRed", async () => {
+        await writeVariableInProc("I_Aktion", "22");
+        await movementDone();
+    });
+    RV6L_STATE.redChipsLeft++;
+}
+
+async function movementDone() {
+    await waitForVariablePolling("I_Aktion", "0");
 }
 
 async function waitForVariablePolling(variable: string, value: string) {
@@ -361,7 +313,7 @@ async function waitForVariablePolling(variable: string, value: string) {
                 }
             } catch (error) {
                 cancel();
-                reject();
+                reject(error);
                 //log error
                 logEvent({
                     errorType: ErrorType.FATAL,
@@ -391,9 +343,19 @@ async function waitForVariablePolling(variable: string, value: string) {
     });
 }
 
+// Values end up inside XML commands, so they must never be able to close a tag and inject further commands
+function escapeXml(value: string): string {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+
 async function readVariableInProc(name: string): Promise<string> {
     let messageId = getNextMessageId();
-    const getVariable = `<RSVCMD><clientStamp>${messageId}</clientStamp><symbolApi><readSymbolValue><name>${name}</name></readSymbolValue></symbolApi></RSVCMD>`
+    const getVariable = `<RSVCMD><clientStamp>${messageId}</clientStamp><symbolApi><readSymbolValue><name>${escapeXml(name)}</name></readSymbolValue></symbolApi></RSVCMD>`
     client.write(getVariable);
 
     const result = await waitForMessage(messageId);
@@ -413,24 +375,18 @@ async function initSymTable() {
 
 async function writeVariableInProc(name: string, value: string) {
     let messageId = getNextMessageId();
-    const setVariable = `<RSVCMD><clientStamp>${messageId}</clientStamp><symbolApi><writeSymbolValue><name>${name}</name><value>${value}</value></writeSymbolValue></symbolApi></RSVCMD>`;
+    const setVariable = `<RSVCMD><clientStamp>${messageId}</clientStamp><symbolApi><writeSymbolValue><name>${escapeXml(name)}</name><value>${escapeXml(value)}</value></writeSymbolValue></symbolApi></RSVCMD>`;
     client.write(setVariable);
 
     await waitForMessage(messageId); // Wait for the response to ensure the write was successful
 
 }
 
+// Only while the robot is standing still, opening the gripper during a movement would drop the chip
 export async function toggleGripper(on: boolean) {
-    if (RV6L_STATE.mock) {
-        await wait(1000); // Simulate delay for mock
-        return;
-    }
-    let messageId = getNextMessageId();
-    const setVariable = `<RSVCMD><clientStamp>${messageId}</clientStamp><symbolApi><writeSymbolValue><name>_IBIN_OUT[6]</name><value>${on ? "1" : "0"}</value></writeSymbolValue></symbolApi></RSVCMD>`;
-    client.write(setVariable);
-
-    await waitForMessage(messageId); // Wait for the response to ensure the write was successful
-
+    await runAction(on ? "GripperOn" : "GripperOff", async () => {
+        await writeVariableInProc("_IBIN_OUT[6]", on ? "1" : "0");
+    });
 }
 
 async function waitForMessage(id: number): Promise<any> {
@@ -448,6 +404,7 @@ async function waitForMessage(id: number): Promise<any> {
             resolve(jsonObj);
             incommingStream.off('data', onDataCallback); // Remove the listener after resolving
             abortSignal.removeListener('abort', cancel); // Remove the abort listener
+            clearTimeout(timeoutID);
         };
         const cancel = () => {
             incommingStream.off('data', onDataCallback); // Remove the listener if cancelled

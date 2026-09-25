@@ -412,11 +412,16 @@ GameManager = {
         try {
             data = await dataPromise;
         } catch (e: any) {
-            GameManager.raiseError({
+            const error: ErrorDescription = {
                 errorType: ErrorType.FATAL,
-                description: "An error occurred during state " + callingState.stateName,
+                description: "An error occurred during state " + callingState.stateName + ": " + (e?.message ?? e),
                 date: new Date().toString()
-            });
+            };
+            GameManager.raiseError(error);
+            // stop the game so no further robot command is sent; the operator recovers via the control panel
+            if (callingState === GameManager.currentGameState) {
+                GameManager.switchState(Error, error);
+            }
             return;
         }
 

@@ -95,7 +95,10 @@ async function handleControlCommand(data: any) {
             sendStateToControlPanelClient!();
         },
         async clean_board_at(payload) {
-            if (payload.x == null || payload.y == null) {
+            // x/y are sent to the robot, only allow real board positions
+            const isValidPosition = Number.isInteger(payload.x) && payload.x >= 0 && payload.x <= 6
+                && Number.isInteger(payload.y) && payload.y >= 0 && payload.y <= 5;
+            if (!isValidPosition) {
                 logEvent({
                     description: 'Invalid coordinates for cleanBoardAt command: ' + JSON.stringify({
                         x: payload.x,
