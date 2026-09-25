@@ -173,6 +173,11 @@ Anzeigebildschirm für Zuschauer vor Ort.
 - 🎯 Aktuelle Spielphase
 - 📊 Schwierigkeitsgrad-Anzeige
 
+#### Anzeige vor Ort
+Das Local Frontend läuft auf einem Raspberry Pi Zero 2 W im Kiosk-Modus mit **cog** (WPE WebKit) bei 1280×720, ohne X-Server. Chromium ist für die 512 MB RAM des Pi Zero zu schwer und ruckelt. Da die Seite auf solcher Hardware läuft, teure CSS-Effekte wie `backdrop-filter` sparsam einsetzen.
+
+> 📋 Einrichtung: [connect4rv6l-deployment, Pfad A](https://github.com/wri-obernburg/connect4rv6l-deployment#pfad-a-nur-kiosk)
+
 ### Component Library
 
 Wiederverwendbare UI-Komponenten für alle Frontends.
