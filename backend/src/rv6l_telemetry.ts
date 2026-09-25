@@ -228,11 +228,21 @@ async function checkAvailability(symbols: string[]) {
     }
 }
 
-// The backend keeps its own chip count, show it next to the controller's counter so drift is visible
+// The backend keeps its own chip count; a difference to the controller's counter means the pallet
+// no longer matches the real magazine, which is shown as a warning
 function withBackendChipCount(value: TelemetryValue): TelemetryValue {
-    if (value.id === "pallet_blue") return { ...value, note: `Backend zählt ${RV6L_STATE.blueChipsLeft} blaue Chips` };
-    if (value.id === "pallet_red") return { ...value, note: `Backend zählt ${RV6L_STATE.redChipsLeft} rote Chips` };
-    return value;
+    const pallets: Record<string, { color: string, backendCount: number }> = {
+        pallet_blue: { color: "blau", backendCount: RV6L_STATE.blueChipsLeft },
+        pallet_red: { color: "rot", backendCount: RV6L_STATE.redChipsLeft },
+    };
+    const pallet = pallets[value.id];
+    if (!pallet) return value;
+    const noted = { ...value, note: `Backend zählt ${pallet.backendCount} Chips` };
+    if (!value.available || value.alarm || Number(value.value) === pallet.backendCount) return noted;
+    return {
+        ...noted, alarm: true,
+        alarmText: `Palette ${pallet.color}: Steuerung zählt ${value.value} Chips, Backend ${pallet.backendCount}`,
+    };
 }
 
 // "Steuerung meldet S84" is not helpful on its own, add the text from the error reference
