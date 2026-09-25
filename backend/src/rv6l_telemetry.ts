@@ -2,6 +2,7 @@ import { getSymbolList, readControllerState, readSymbol, readSymbols, RV6L_STATE
 import { ErrorType, logEvent } from "./errorHandler/error_handler.ts";
 import { sendStateToControlPanelClient } from "./internal_server.ts";
 import { lookupRsvError, type RsvError } from "./rsv_errors.ts";
+import { getLogbookSince } from "./rv6l_monitor.ts";
 import { recordEvent, setRobotReadyCheck, updateCondition, updateStartLock } from "./fault_memory.ts";
 import { state } from "./state.ts";
 import { GameManager } from "./game/game_manager.ts";
@@ -61,11 +62,13 @@ export type TelemetryValue = {
 };
 
 const POLL_INTERVAL_MS = 1000;
-const MIN_AUTO_OVERRIDE = 10;
 // warn when a motor draws more than this share of its maximum current
 const CURRENT_WARNING_SHARE = 0.9;
 // the game only works with this program running in the interpreter
 const GAME_PROGRAM = (process.env.ROBOT_PROGRAM || "S:/PROG/4GEWINNT/AKTUELL/4GEWINNT.MPR").toUpperCase();
+// Subprograms called by the game program (U_PROG in robot-program/4GEWINNT/4GEWINNT.MPR). The interpreter
+// reports the file it is executing, so while one of these runs it shows e.g. CHIP_IN_SCHACHT.SPR
+const GAME_SUBPROGRAMS = ["BLAU_GREIFEN", "ROT_GREIFEN", "FELDENTNAHME", "CHIP_IN_SCHACHT", "BLAU_ABLEGEN", "ROT_ABLEGEN"];
 // game states in which the robot moves; a much longer duration than expected means it is stuck
 const MOVING_STATES = ["GRAP_BLUE_CHIP", "PLACE_BLUE_CHIP", "GRAP_RED_CHIP", "PLACE_RED_CHIP", "CLEAN_UP"];
 
@@ -73,9 +76,9 @@ const flag = (byte: number, bit: number) => ({ symbol: `_IPLC[${Math.floor(byte 
 
 const ITEMS: TelemetryItem[] = [
     { id: "user_level", group: "Steuerung", label: "Benutzerlevel", symbol: "_SSTATUS_TEXT[2]", kind: "text" },
-    { id: "override_auto", group: "Steuerung", label: "Override Automatik", symbol: "_IAUTO_OVER", kind: "number", unit: "%", // 0 % is reported as "Roboter kann fahren" in controllerValues()
-      alarmValues: Array.from({ length: MIN_AUTO_OVERRIDE - 1 }, (_, i) => i + 1), severity: "warning", alarmText: "Override Automatik nur {value} %" },
-    { id: "override_manual", group: "Steuerung", label: "Override Hand", symbol: "_IMAN_OVER", kind: "number", unit: "%" },
+    // _IAUTO_OVER stays 0 in AUTO, so it is not the override. _ROVERRIDE_VALUE[1] changes with the override on
+    // the pendant (e.g. 34 % logged at a stop), but this is not confirmed yet, so it is shown without a check
+    { id: "override", group: "Steuerung", label: "Override", symbol: "_ROVERRIDE_VALUE[1]", kind: "number", unit: "%", note: "vermutlich der aktuelle Override, noch nicht bestätigt" },
     { id: "brakes", group: "Steuerung", label: "Status Bremsen", symbol: "_ISTATUS_OF_BRAKES", kind: "bits" },
     { id: "safety_controller", group: "Steuerung", label: "Safety-Controller Status", symbol: "_ISC_STATUS_INTERN", kind: "bits" },
     { id: "ups", group: "Steuerung", label: "USV-Status", symbol: "_IUPS_STATUS", kind: "bits" },
@@ -93,9 +96,6 @@ const ITEMS: TelemetryItem[] = [
     { id: "field_z", group: "Programm", label: "Feld Z (IZ_Feld)", symbol: "IZ_Feld", kind: "number" },
 
     { id: "collective_fault", group: "Störungen", label: "Sammelstörung", ...flag(1012, 2), kind: "flag", alarmWhen: 1, severity: "fatal", okText: "keine", alarmText: "Sammelstörung aktiv", note: "Merker M1012.2" },
-    // the input of the pressure switch is set in the machine data IBIN_FUNC_IN[1], which cannot be read
-    // via the interface, so missing air is detected by the controller's message S19
-    { id: "compressed_air", group: "Störungen", label: "Druckluft", symbol: "_IACT_ERROR", kind: "number", alarmValues: [19], severity: "fatal", okText: "in Ordnung", alarmText: "Druckluft fehlt (Meldung S19)", note: "Erkannt über Meldung S19 der Steuerung" },
     { id: "safety_controller_error", group: "Störungen", label: "Safety-Controller", symbol: "_ISC_ERROR[1]", kind: "number", alarmWhenNotZero: true, severity: "fatal", okText: "kein Fehler", alarmText: "Safety-Controller meldet Fehler {value}" },
     { id: "collision", group: "Störungen", label: "Kollision", ...flag(970, 3), kind: "flag", alarmWhen: 1, severity: "fatal", okText: "keine", alarmText: "Kollision erkannt", note: "Merker M970.3" },
     ...[1, 2, 3, 4, 5, 6].map((axis): TelemetryItem => ({
@@ -105,10 +105,6 @@ const ITEMS: TelemetryItem[] = [
     })),
     { id: "collision_detection", group: "Störungen", label: "Kollisionserkennung", ...flag(970, 2), kind: "flag", alarmWhen: 0, severity: "warning", okText: "eingeschaltet", alarmText: "Kollisionserkennung ist ausgeschaltet", note: "Merker M970.2" },
 
-    // messages of the controller, shown with the explanation from the Reis error reference
-    { id: "active_message", group: "Meldung", label: "Aktiver Fehler", symbol: "_IACT_ERROR", kind: "number", alarmWhenNotZero: true, severity: "warning", alarmText: "Steuerung meldet S{value}" },
-    { id: "displayed_message", group: "Meldung", label: "Am Bedienpanel angezeigte Meldung", symbol: "_IDISP_ERROR", kind: "number" },
-    { id: "displayed_message_text", group: "Meldung", label: "Text am Bedienpanel", symbol: "_SDISP_ERROR", kind: "text" },
 
     { id: "position", group: "Bewegung", label: "Istposition (_PACTPOS)", symbol: "_PACTPOS", kind: "position" },
     ...[1, 2, 3, 4, 5, 6].map((axis): TelemetryItem => ({
@@ -117,11 +113,10 @@ const ITEMS: TelemetryItem[] = [
     ...[1, 2, 3, 4, 5, 6].map((axis): TelemetryItem => ({
         id: `current_axis_${axis}`, group: "Bewegung", label: `Motorstrom Achse ${axis}`, symbol: `_RCURR_ACT[${axis}]`, kind: "number",
     })),
-    // current limits of the drives, compared with the actual current in motorCurrentValue()
-    ...[1, 2, 3, 4, 5, 6].flatMap((axis): TelemetryItem[] => [
-        { id: `current_max_p_${axis}`, group: "Grenzwerte", label: `Max. Strom + Achse ${axis}`, symbol: `_RCURR_MAX_P[${axis}]`, kind: "number" },
-        { id: `current_max_n_${axis}`, group: "Grenzwerte", label: `Max. Strom - Achse ${axis}`, symbol: `_RCURR_MAX_N[${axis}]`, kind: "number" },
-    ]),
+    // maximum current of the drives, compared with the actual current in motorCurrentValue();
+    // _RCURR_MAX_P/N are measured peaks, not limits
+    ...[1, 2, 3, 4, 5, 6].map((axis): TelemetryItem => (
+        { id: `current_limit_${axis}`, group: "Grenzwerte", label: `Maximalstrom Achse ${axis}`, symbol: `_RCURRENT_MAX[${axis}]`, kind: "number" })),
     { id: "overload", group: "Störungen", label: "Überlasterkennung", symbol: "_IOVERLOAD_DETECT", kind: "number", alarmWhenNotZero: true, severity: "warning", okText: "keine Überlast", alarmText: "Überlasterkennung meldet {value}", note: "_IOVERLOAD_DETECT, Bedeutung der Werte nicht dokumentiert" },
 
     // the robot program switches the vacuum with SCHR_BIT #AUSGANG Byte 20 Bit 0, which is bit 0 of _IBIN_OUT[6]
@@ -159,22 +154,68 @@ export function getTelemetry() {
     return { updatedAt, values, messages: getMessages() };
 }
 
-// The controller keeps the active error (_IACT_ERROR) and the message shown on the pendant (_IDISP_ERROR)
-// separately, e.g. S84 active while "Error #21" is displayed, so both are explained
+// ---------------------------------------------------------------------------------------------
+// Messages of the controller, followed in its logbook. _IACT_ERROR and _IDISP_ERROR only hold the last
+// message and keep it after it was acknowledged, so they cannot tell whether a message is still pending.
+// In the logbook every message is an entry, and acknowledging it at the pendant writes a "message ack".
+
+type PendingMessage = { number: number, level: string, parameters: string[], date: string };
+
+// informational messages worth keeping in the fault memory; others like the axis dumps S101 are noise
+const STORED_INFORMATION = [84, 85];
+const LOGBOOK_INTERVAL_MS = 2000;
+
+let logbookSize: number | null = null;
+let lastLogbookCheck = 0;
+let pendingMessages: PendingMessage[] = [];
+
+async function followLogbook() {
+    if (Date.now() - lastLogbookCheck < LOGBOOK_INTERVAL_MS) return;
+    lastLogbookCheck = Date.now();
+    const firstRun = logbookSize === null;
+    const { size, entries } = await getLogbookSince(logbookSize);
+    logbookSize = size;
+    for (const entry of entries) {
+        if (entry.type === "Quittierung") {
+            pendingMessages = [];
+            continue;
+        }
+        if (entry.type !== "Meldung") continue;
+        const level = entry.level ?? "";
+        if (/error|warn/i.test(level)) {
+            pendingMessages = [...pendingMessages.filter((m) => m.number !== entry.number),
+                { number: entry.number, level, parameters: entry.parameters, date: entry.date }];
+        } else if (!firstRun && STORED_INFORMATION.includes(entry.number)) {
+            const reference = lookupRsvError(entry.number, entry.parameters);
+            recordEvent(`message:S${entry.number}`, {
+                title: `S${entry.number}${reference ? `: ${reference.message}` : ""}`,
+                severity: "warning", critical: false, source: "Meldung der Steuerung",
+                details: reference?.cause ? `Ursache: ${reference.cause} Abhilfe: ${reference.remedy}` : undefined,
+            });
+        }
+    }
+}
+
+// newest first, like the pendant shows them
 function getMessages(): ControllerMessage[] {
-    const numberOf = (id: string) => Number(values.find((v) => v.id === id && v.available)?.value ?? 0);
-    const displayedText = String(values.find((v) => v.id === "displayed_message_text")?.value ?? "");
-    const messages: ControllerMessage[] = [];
-    const displayed = numberOf("displayed_message");
-    if (displayed) {
-        const level = /^(\w+)\s*#/.exec(displayedText)?.[1] ?? null;
-        messages.push({ number: displayed, source: "displayed", level, reference: lookupRsvError(displayed) });
-    }
-    const active = numberOf("active_message");
-    if (active && active !== displayed) {
-        messages.push({ number: active, source: "active", level: null, reference: lookupRsvError(active) });
-    }
-    return messages;
+    return [...pendingMessages].reverse().map((m, i) => ({
+        number: m.number,
+        source: i === 0 ? "displayed" : "active",
+        level: /error/i.test(m.level) ? "Error" : "Warning",
+        reference: lookupRsvError(m.number, m.parameters),
+    }));
+}
+
+// The pressure switch input is set in the machine data IBIN_FUNC_IN[1], which cannot be read via the
+// interface, so missing air is detected by the controller's message S19
+function compressedAirValue(): TelemetryValue {
+    const missing = pendingMessages.some((m) => m.number === 19);
+    return {
+        id: "compressed_air", group: "Störungen", label: "Druckluft", symbol: "", kind: "text",
+        available: logbookSize !== null, value: missing ? "fehlt" : "in Ordnung", alarm: missing,
+        okText: "in Ordnung", alarmText: "Druckluft fehlt (Meldung S19)", severity: "fatal",
+        note: "Erkannt über Meldung S19 der Steuerung",
+    };
 }
 
 export function initTelemetry() {
@@ -226,13 +267,16 @@ async function poll() {
         await checkAvailability([...unavailable]);
     }
 
+    await followLogbook().catch((error) => {
+        if (String(error) !== lastPollError) console.log(`Logbook could not be read: ${error}`);
+    });
     const controller = await readControllerState();
     values = [
-        ...controllerValues(controller, Number(raw["_IAUTO_OVER"])),
+        ...controllerValues(controller),
         ...ITEMS.filter((item) => item.group !== "Grenzwerte")
             .map((item) => toValue(item, item.symbol in raw ? raw[item.symbol] : undefined))
-            .map((value) => withBackendChipCount(value))
-            .map((value) => withMessageText(value)),
+            .map((value) => withBackendChipCount(value)),
+        compressedAirValue(),
         motorCurrentValue(raw),
         gameStateWatchdogValue(),
     ];
@@ -257,7 +301,7 @@ export function getRobotReadiness() {
 
 const isGameRunning = () => !["IDLE", "ERROR"].includes(state.stateName);
 
-function controllerValues(controller: ControllerState, autoOverride: number): TelemetryValue[] {
+function controllerValues(controller: ControllerState): TelemetryValue[] {
     // not ready is a fault that stops the game while one is running, otherwise a warning that blocks the start
     const during = isGameRunning();
     const status = (id: string, label: string, available: boolean, ok: boolean, okText: string, alarmText: string, note?: string): TelemetryValue => ({
@@ -271,7 +315,7 @@ function controllerValues(controller: ControllerState, autoOverride: number): Te
     const auto = /auto/i.test(mode);
     const program = controller.interpreter?.filename ?? "";
     const programName = program.split("/").pop() ?? program;
-    const rightProgram = program.toUpperCase() === GAME_PROGRAM;
+    const rightProgram = isGameProgramFile(program);
     const running = controller.interpreter?.state === "active";
 
     const values = [
@@ -282,14 +326,27 @@ function controllerValues(controller: ControllerState, autoOverride: number): Te
             `${programName} läuft`,
             !rightProgram ? `Falsches Programm angewählt: ${programName || "keins"}` : `${programName} läuft nicht (Interpreter ${controller.interpreter?.state})`,
             `Erwartet: ${GAME_PROGRAM}`),
-        status("override_zero", "Roboter kann fahren", !Number.isNaN(autoOverride), autoOverride > 0, "Override > 0 %",
-            "Override Automatik steht auf 0 %, der Roboter fährt nicht"),
     ];
     readiness = {
         ready: values.every((v) => v.available && !v.alarm),
         reasons: values.filter((v) => !v.available || v.alarm).map((v) => v.available ? v.alarmText! : `${v.label} unbekannt`),
     };
     return values;
+}
+
+// Between two commands the interpreter always waits in the main program, so the last main program (.MPR)
+// seen tells whether a running subprogram belongs to the game or e.g. to the test sequence
+let lastMainProgram = "";
+
+function isGameProgramFile(filename: string) {
+    const file = filename.toUpperCase();
+    if (file.endsWith(".MPR")) lastMainProgram = file;
+    if (file === GAME_PROGRAM) return true;
+    const folder = GAME_PROGRAM.slice(0, GAME_PROGRAM.lastIndexOf("/") + 1);
+    const name = file.slice(folder.length).replace(/\.SPR$/, "");
+    const isSubprogram = file.startsWith(folder) && file.endsWith(".SPR") && GAME_SUBPROGRAMS.includes(name);
+    // right after a backend start the main program may not have been seen yet
+    return isSubprogram && (lastMainProgram === "" || lastMainProgram === GAME_PROGRAM);
 }
 
 setRobotReadyCheck(() => getRobotReadiness().ready);
@@ -302,7 +359,7 @@ function motorCurrentValue(raw: Record<string, string>): TelemetryValue {
     let available = false;
     for (let axis = 1; axis <= 6; axis++) {
         const current = Number(raw[`_RCURR_ACT[${axis}]`]);
-        const limit = Math.min(Math.abs(Number(raw[`_RCURR_MAX_P[${axis}]`])), Math.abs(Number(raw[`_RCURR_MAX_N[${axis}]`])));
+        const limit = Math.abs(Number(raw[`_RCURRENT_MAX[${axis}]`]));
         if (Number.isNaN(current) || !limit) continue;
         available = true;
         const share = Math.abs(current) / limit;
@@ -313,7 +370,7 @@ function motorCurrentValue(raw: Record<string, string>): TelemetryValue {
         id: "motor_current", group: "Störungen", label: "Motorströme", symbol: "_RCURR_ACT", kind: "text",
         available, value: high.length ? alarmText : "im normalen Bereich", alarm: high.length > 0,
         okText: "im normalen Bereich", alarmText, severity: "warning",
-        note: `Warnung ab ${CURRENT_WARNING_SHARE * 100} % von _RCURR_MAX_P/N`,
+        note: `Warnung ab ${CURRENT_WARNING_SHARE * 100} % von _RCURRENT_MAX`,
     };
 }
 
@@ -366,25 +423,24 @@ async function checkAvailability(symbols: string[]) {
 // The backend keeps its own chip count; a difference to the controller's counter means the pallet
 // no longer matches the real magazine, which is shown as a warning
 function withBackendChipCount(value: TelemetryValue): TelemetryValue {
-    const pallets: Record<string, { color: string, backendCount: number }> = {
-        pallet_blue: { color: "blau", backendCount: RV6L_STATE.blueChipsLeft },
-        pallet_red: { color: "rot", backendCount: RV6L_STATE.redChipsLeft },
+    const pallets: Record<string, { color: string, key: "blueChipsLeft" | "redChipsLeft" }> = {
+        pallet_blue: { color: "blau", key: "blueChipsLeft" },
+        pallet_red: { color: "rot", key: "redChipsLeft" },
     };
     const pallet = pallets[value.id];
-    if (!pallet) return value;
-    const noted = { ...value, note: `Backend zählt ${pallet.backendCount} Chips` };
-    if (!value.available || value.alarm || Number(value.value) === pallet.backendCount) return noted;
-    return {
-        ...noted, alarm: true,
-        alarmText: `Palette ${pallet.color}: Steuerung zählt ${value.value} Chips, Backend ${pallet.backendCount}`,
-    };
-}
-
-// "Steuerung meldet S84" is not helpful on its own, add the text from the error reference
-function withMessageText(value: TelemetryValue): TelemetryValue {
-    if (value.id !== "active_message" || !value.alarm) return value;
-    const reference = lookupRsvError(Number(value.value));
-    return reference ? { ...value, alarmText: `${value.alarmText}: ${reference.message}` } : value;
+    if (!pallet || !value.available) return value;
+    // the controller's counter is the truth; while the backend is not moving the robot, a change comes from
+    // the pendant (e.g. chips taken by hand or with a test sequence), so the backend just takes it over
+    const controllerCount = Number(value.value);
+    if (!RV6L_STATE.rv6l_moving && RV6L_STATE[pallet.key] !== controllerCount) {
+        logEvent({
+            errorType: ErrorType.INFO,
+            description: `Palette ${pallet.color} an der Steuerung verändert, Zähler ${RV6L_STATE[pallet.key]} → ${controllerCount} übernommen`,
+            date: new Date().toString()
+        });
+        RV6L_STATE[pallet.key] = controllerCount;
+    }
+    return value;
 }
 
 function toValue(item: TelemetryItem, raw: string | undefined): TelemetryValue {
@@ -467,7 +523,7 @@ function updateFaultMemory() {
     }
 
     const current = new Set<string>();
-    for (const message of getMessages()) {
+    for (const message of getMessages().filter((m) => !STORED_INFORMATION.includes(m.number))) {
         const key = `message:S${message.number}`;
         current.add(key);
         updateCondition(key, true, {
@@ -476,7 +532,7 @@ function updateFaultMemory() {
             // errors shown on the pendant stop the robot; information like S84 does not
             critical: message.level === "Error",
             source: "Meldung der Steuerung",
-            details: message.reference ? `Ursache: ${message.reference.cause} Abhilfe: ${message.reference.remedy}` : undefined,
+            details: message.reference?.cause ? `Ursache: ${message.reference.cause} Abhilfe: ${message.reference.remedy}` : undefined,
         });
     }
     for (const key of storedMessageKeys) {

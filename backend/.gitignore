@@ -32,3 +32,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# message catalog of the teach pendant, extracted locally with tools/extract-rsv-messages.mjs (proprietary)
+data/rsv_messages.json

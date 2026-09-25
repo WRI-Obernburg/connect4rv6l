@@ -46,7 +46,7 @@ function buildItems(game: GameData, tasks: TaskState[] | undefined, coincidence:
             label: m.source === "displayed" ? "Meldung am Bedienpanel" : "Aktiver Fehler",
             value: `S${m.number}${m.reference ? `: ${m.reference.message}` : ""}`,
             tone: m.level === "Error" ? "error" : "warn",
-            detail: m.reference ? `Abhilfe: ${m.reference.remedy}` : undefined,
+            detail: m.reference?.remedy ? `Abhilfe: ${m.reference.remedy}` : undefined,
         });
     }
     const open = game.faultMemory?.open ?? [];

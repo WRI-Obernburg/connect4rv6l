@@ -82,6 +82,7 @@ const ENTRY_TYPES: Record<string, string> = {
     "logbook program": "Programm",
     "logbook operation mode": "Betriebsart",
     "logbook usv": "USV",
+    "message ack": "Quittierung",
     "logbook progsys": "Programmsystem",
     "message": "Meldung",
 };
@@ -114,14 +115,15 @@ function toEntry(journal: any, index: number): LogbookEntry {
         source: text(journal?.Source) || undefined,
         parameters,
         // messages share their numbers with the S codes of the Reis error list
-        text: isMessage ? lookupRsvError(number)?.message : undefined,
+        text: isMessage ? lookupRsvError(number, parameters)?.message : undefined,
         related: asArray(journal?.ChainList?.Journal).map((child: any) => {
             const childType = String(child?.["@type"] ?? "");
+            const childParameters = asArray(child?.Parameters?.Parameter).map(text);
             return {
                 type: ENTRY_TYPES[childType] ?? childType,
                 key: text(child?.Key),
-                parameters: asArray(child?.Parameters?.Parameter).map(text),
-                text: childType === "message" ? lookupRsvError(Number(text(child?.Number)))?.message : undefined,
+                parameters: childParameters,
+                text: childType === "message" ? lookupRsvError(Number(text(child?.Number)), childParameters)?.message : undefined,
             };
         }),
     };
@@ -140,6 +142,22 @@ export async function getLogbook(count: number, before?: number): Promise<{ size
         "lgbApi", "getLogbookEntries");
     const entries = asArray(node?.entries?.Journal).map((journal, i) => toEntry(journal, begin + i));
     return { size, entries: entries.reverse() };
+}
+
+/**
+ * New logbook entries since `since` (the logbook size seen last time), oldest first. Without `since` the last
+ * `initial` entries are returned, e.g. to find out which messages are still waiting for acknowledgement.
+ */
+export async function getLogbookSince(since: number | null, initial = 100): Promise<{ size: number, entries: LogbookEntry[] }> {
+    const sizeNode = reply(await sendMonitorCommand(`<lgbApi><getLogbookSize>${ACCEPT_ALL}</getLogbookSize></lgbApi>`), "lgbApi", "getLogbookSize");
+    const size = Number(text(sizeNode?.size)) || 0;
+    // the logbook is a ring buffer; if it shrank or too much is new, only look at the newest entries
+    let begin = since === null || since > size ? size - initial : since;
+    begin = Math.max(0, size - 200, begin);
+    if (begin >= size) return { size, entries: [] };
+    const node = reply(await sendMonitorCommand(`<lgbApi><getLogbookEntries><begin>${begin}</begin><end>${size}</end>${ACCEPT_ALL}</getLogbookEntries></lgbApi>`, 60000),
+        "lgbApi", "getLogbookEntries");
+    return { size, entries: asArray(node?.entries?.Journal).map((journal, i) => toEntry(journal, begin + i)) };
 }
 
 // ---------------------------------------------------------------------------------------------

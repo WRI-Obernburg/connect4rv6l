@@ -257,20 +257,22 @@ async function ensureRobotReady() {
 
 export async function moveToBlue() {
     await runAction("MoveToBlue", async () => {
+        const before = await palletCounter("blue");
         await writeVariableInProc("I_Aktion", "11");
         await movementDone();
         await expectVacuum(true, "dem Greifen des blauen Chips");
+        await expectPalletStep("blue", before, "Greifen");
     });
-    RV6L_STATE.blueChipsLeft--;
 }
 
 export async function moveToRed() {
     await runAction("MoveToRed", async () => {
+        const before = await palletCounter("red");
         await writeVariableInProc("I_Aktion", "21");
         await movementDone();
         await expectVacuum(true, "dem Greifen des roten Chips");
+        await expectPalletStep("red", before, "Greifen");
     });
-    RV6L_STATE.redChipsLeft--;
 }
 
 export async function moveToColumn(column: number) {
@@ -320,20 +322,40 @@ export async function removeFromField(x: number, y:number) {
 
 export async function putBackToBlue() {
     await runAction("PutBackToBlue", async () => {
+        const before = await palletCounter("blue");
         await writeVariableInProc("I_Aktion", "12");
         await movementDone();
         await expectVacuum(false, "dem Ablegen im blauen Magazin");
+        await expectPalletStep("blue", before, "Ablegen");
     });
-    RV6L_STATE.blueChipsLeft++;
 }
 
 export async function putBackToRed() {
     await runAction("PutBackToRed", async () => {
+        const before = await palletCounter("red");
         await writeVariableInProc("I_Aktion", "22");
         await movementDone();
         await expectVacuum(false, "dem Ablegen im roten Magazin");
+        await expectPalletStep("red", before, "Ablegen");
     });
-    RV6L_STATE.redChipsLeft++;
+}
+
+// The pallet counters I_blau / I_rot of the robot program count down on every PALETTE #EIN, for gripping as
+// well as for putting a chip back. The controller's counter is the truth: the backend takes it over, also when
+// chips are taken at the pendant, and checks that its own actions moved the counter by exactly one.
+const PALLET_SYMBOL = { blue: "I_blau", red: "I_rot" } as const;
+
+async function palletCounter(color: "blue" | "red") {
+    return Number(await readVariableInProc(PALLET_SYMBOL[color]));
+}
+
+async function expectPalletStep(color: "blue" | "red", before: number, action: string) {
+    const after = await palletCounter(color);
+    if (color === "blue") RV6L_STATE.blueChipsLeft = after;
+    else RV6L_STATE.redChipsLeft = after;
+    if (after !== before - 1) {
+        throw new Error(`Palette ${color === "blue" ? "blau" : "rot"} hat beim ${action} nicht um eins weitergezählt (vorher ${before}, nachher ${after})`);
+    }
 }
 
 // The robot program switches the suction cup with output byte 20 bit 0 (bit 0 of _IBIN_OUT[6]).
