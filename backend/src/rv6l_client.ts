@@ -1,18 +1,32 @@
 import * as net from 'net';
 import { XMLParser } from 'fast-xml-parser';
-import * as stream from 'stream';
 import { sendStateToControlPanelClient } from "./internal_server.ts";
 import { ErrorType, logEvent } from "./errorHandler/error_handler.ts";
 import EventEmitter from "events";
 
 var client = new net.Socket();
 const parser = new XMLParser();
-const incommingStream = new stream.PassThrough();
 
 // TCP has no message boundaries: a response can arrive split over several chunks,
 // so unfinished data is kept here until its closing tag arrives
 const RESPONSE_END = '</RSVRES>';
 let receiveBuffer = '';
+
+// The controller answers every command before it accepts the next one, so commands are sent strictly
+// one after another and the next response always belongs to the command in flight. This also matches
+// error responses, which carry no clientStamp.
+type PendingCommand = {
+    body: string,
+    timeoutMs: number,
+    resolve: (response: any) => void,
+    reject: (error: Error) => void,
+    timer?: ReturnType<typeof setTimeout>
+};
+const commandQueue: PendingCommand[] = [];
+let commandInFlight: PendingCommand | null = null;
+
+// Incremented by interruptRV6LAction; a running action stops at its next step when it changed
+let abortGeneration = 0;
 
 export let RV6L_STATE = {
     globalMessageCounter: 0,
@@ -56,6 +70,7 @@ export function interruptRV6LAction() {
     })
     // Only stops waiting in this process, the robot itself finishes its current movement.
     // The running action rejects and releases its lock; the next command waits until I_Aktion is 0 again.
+    abortGeneration++;
     abortSignal.emit('abort');
 }
 
@@ -89,6 +104,11 @@ export async function initRV6LClient() {
             client.write(startSessionCommand);
 
             await initSymTable().catch((err) => {
+                logEvent({
+                    errorType: ErrorType.WARNING,
+                    description: `Could not initialize the RV6L symbol table: ${err}`,
+                    date: new Date().toString()
+                });
             })
             // await initChipPalletizing()
 
@@ -103,22 +123,14 @@ export async function initRV6LClient() {
             while ((end = receiveBuffer.indexOf(RESPONSE_END)) !== -1) {
                 const completeMessage = receiveBuffer.slice(0, end + RESPONSE_END.length);
                 receiveBuffer = receiveBuffer.slice(end + RESPONSE_END.length);
-                try {
-                    const jsonObj = parser.parse(completeMessage);
-                    incommingStream.write(JSON.stringify(jsonObj));
-                } catch (e) {
-                    logEvent({
-                        errorType: ErrorType.WARNING,
-                        description: `Could not parse RV6L response: ${completeMessage}`,
-                        date: new Date().toString()
-                    });
-                }
+                handleResponse(completeMessage);
             }
         });
 
         client.on('close', async function () {
 
             RV6L_STATE.rv6l_connected = false;
+            failAllCommands(new Error("RV6L connection closed"));
             logEvent({
                 errorType: ErrorType.WARNING,
                 description: "RV6L connection closed unexpectedly. Reconnecting...",
@@ -163,6 +175,14 @@ export class RV6LBusyError extends Error {
  * when the robot reports that it has finished its previous movement (I_Aktion == 0).
  * Errors are passed on to the caller so the game stops instead of sending the next command.
  */
+let activeActionGeneration = 0;
+
+function throwIfAborted() {
+    if (abortGeneration !== activeActionGeneration) {
+        throw new Error("RV6L action was aborted");
+    }
+}
+
 async function runAction(actionName: string, robotSteps: () => Promise<void>) {
     if (RV6L_STATE.rv6l_moving) {
         logEvent({
@@ -174,6 +194,7 @@ async function runAction(actionName: string, robotSteps: () => Promise<void>) {
     }
 
     startAction(actionName);
+    activeActionGeneration = abortGeneration;
     try {
         if (RV6L_STATE.mock) {
             await wait(1000); // Simulate delay for mock
@@ -295,6 +316,7 @@ async function waitForVariablePolling(variable: string, value: string) {
         let abort = false;
         async function poll() {
             try {
+                throwIfAborted();
                 const currentValue = await readVariableInProc(variable);
                 if (currentValue.toString() === value) {
                     let deltaTime = Date.now() - startTime;
@@ -323,7 +345,6 @@ async function waitForVariablePolling(variable: string, value: string) {
             }
 
         }
-        poll();
         const cancel = () => {
             abort = true;
             abortSignal.removeListener('abort', cancel); // Remove the abort listener
@@ -340,6 +361,7 @@ async function waitForVariablePolling(variable: string, value: string) {
             cancel();
         }, 30000); // 30 seconds timeout
         abortSignal.once('abort', cancel); // Listen for abort signal
+        poll();
     });
 }
 
@@ -353,72 +375,106 @@ function escapeXml(value: string): string {
         .replace(/'/g, '&apos;');
 }
 
+function sendCommand(body: string, timeoutMs = 5000): Promise<any> {
+    return new Promise((resolve, reject) => {
+        commandQueue.push({ body, timeoutMs, resolve, reject });
+        sendNextCommand();
+    });
+}
+
+function sendNextCommand() {
+    if (commandInFlight || commandQueue.length === 0) return;
+    if (!RV6L_STATE.rv6l_connected) {
+        failAllCommands(new Error("RV6L is not connected"));
+        return;
+    }
+    const command = commandQueue.shift()!;
+    commandInFlight = command;
+    command.timer = setTimeout(() => {
+        // without an answer it is unclear which response belongs to which command, so start over
+        commandInFlight = null;
+        command.reject(new Error(`No response from RV6L within ${command.timeoutMs} ms`));
+        client.destroy();
+    }, command.timeoutMs);
+    client.write(`<RSVCMD><clientStamp>${getNextMessageId()}</clientStamp>${command.body}</RSVCMD>`);
+}
+
+function handleResponse(message: string) {
+    const command = commandInFlight;
+    if (!command) {
+        logEvent({
+            errorType: ErrorType.WARNING,
+            description: `Unexpected RV6L response without a pending command: ${message}`,
+            date: new Date().toString()
+        });
+        return;
+    }
+    commandInFlight = null;
+    clearTimeout(command.timer);
+
+    try {
+        const response = parser.parse(message);
+        if (response?.RSVRES?.error !== undefined) {
+            const details = [response.RSVRES.error].flat().join(" ");
+            command.reject(new Error(`RV6L error: ${details}`));
+        } else {
+            command.resolve(response);
+        }
+    } catch (e) {
+        command.reject(new Error(`Could not parse RV6L response: ${message}`));
+    }
+    sendNextCommand();
+}
+
+function failAllCommands(error: Error) {
+    if (commandInFlight) {
+        clearTimeout(commandInFlight.timer);
+        commandInFlight.reject(error);
+        commandInFlight = null;
+    }
+    commandQueue.splice(0).forEach((command) => command.reject(error));
+}
+
 async function readVariableInProc(name: string): Promise<string> {
-    let messageId = getNextMessageId();
-    const getVariable = `<RSVCMD><clientStamp>${messageId}</clientStamp><symbolApi><readSymbolValue><name>${escapeXml(name)}</name></readSymbolValue></symbolApi></RSVCMD>`
-    client.write(getVariable);
-
-    const result = await waitForMessage(messageId);
-
+    const result = await sendCommand(`<symbolApi><readSymbolValue><name>${escapeXml(name)}</name></readSymbolValue></symbolApi>`);
     return result.RSVRES.symbolApi.readSymbolValue.value;
 }
 
 async function initSymTable() {
-    let messageId = getNextMessageId();
-    const initSymbolsCommand = `<RSVCMD><clientStamp>${messageId}</clientStamp><symbolApi><initSymbolTable/></symbolApi></RSVCMD>`;
-    client.write(initSymbolsCommand);
-
-    await waitForMessage(messageId); // Wait for the response to ensure the write was successful
-
+    // building the symbol table takes several seconds on the controller
+    await sendCommand(`<symbolApi><initSymbolTable/></symbolApi>`, 30000);
 }
 
-
 async function writeVariableInProc(name: string, value: string) {
-    let messageId = getNextMessageId();
-    const setVariable = `<RSVCMD><clientStamp>${messageId}</clientStamp><symbolApi><writeSymbolValue><name>${escapeXml(name)}</name><value>${escapeXml(value)}</value></writeSymbolValue></symbolApi></RSVCMD>`;
-    client.write(setVariable);
+    throwIfAborted();
+    await sendCommand(`<symbolApi><writeSymbolValue><name>${escapeXml(name)}</name><value>${escapeXml(value)}</value></writeSymbolValue></symbolApi>`);
+}
 
-    await waitForMessage(messageId); // Wait for the response to ensure the write was successful
+// Read only access for the telemetry and the variable explorer of the control panel
+export async function readSymbols(names: string[]): Promise<Record<string, string>> {
+    const body = names.map((name) => `<symbol><name>${escapeXml(name)}</name></symbol>`).join("");
+    const result = await sendCommand(`<symbolApi><readSymbolValues>${body}</readSymbolValues></symbolApi>`);
+    const symbols = [result.RSVRES.symbolApi.readSymbolValues.symbol].flat();
+    return Object.fromEntries(symbols.map((symbol: any) => [String(symbol.name), String(symbol.value ?? "").trim()]));
+}
 
+export async function readSymbol(name: string, machineData = false): Promise<string> {
+    const result = await sendCommand(`<symbolApi><readSymbolValue><name>${escapeXml(name)}</name>${machineData ? "<machineData/>" : ""}</readSymbolValue></symbolApi>`);
+    return String(result.RSVRES.symbolApi.readSymbolValue.value ?? "").trim();
+}
+
+export type SymbolListType = "sysVar" | "var" | "input" | "output" | "marker" | "machineData";
+
+export async function getSymbolList(type: SymbolListType): Promise<string[]> {
+    const result = await sendCommand(`<symbolApi><getSymbolList><${type}/></getSymbolList></symbolApi>`, 30000);
+    const symbols = result.RSVRES.symbolApi.symbolList?.symbol ?? [];
+    return [symbols].flat().map((symbol: any) => String(symbol.name));
 }
 
 // Only while the robot is standing still, opening the gripper during a movement would drop the chip
 export async function toggleGripper(on: boolean) {
     await runAction(on ? "GripperOn" : "GripperOff", async () => {
         await writeVariableInProc("_IBIN_OUT[6]", on ? "1" : "0");
-    });
-}
-
-async function waitForMessage(id: number): Promise<any> {
-
-    return new Promise((resolve, reject) => {
-        const onDataCallback = (data: any) => {
-            const jsonObj = JSON.parse(data.toString());
-            try{
-                if (jsonObj.RSVRES.clientStamp !== id) {
-                    return; // Ignore messages with different clientStamp
-                }
-            }catch(e){
-                return;
-            }
-            resolve(jsonObj);
-            incommingStream.off('data', onDataCallback); // Remove the listener after resolving
-            abortSignal.removeListener('abort', cancel); // Remove the abort listener
-            clearTimeout(timeoutID);
-        };
-        const cancel = () => {
-            incommingStream.off('data', onDataCallback); // Remove the listener if cancelled
-            abortSignal.removeListener('abort', cancel); // Remove the abort listener
-            reject(new Error(`Canceled waiting for message with id ${id}`));
-            clearTimeout(timeoutID); // Clear the timeout if cancelled
-        }
-        incommingStream.on('data', onDataCallback);
-
-        const timeoutID = setTimeout(() => {
-            cancel();
-        }, 5000);
-        abortSignal.once('abort', cancel); // Listen for abort signal
-
     });
 }
 

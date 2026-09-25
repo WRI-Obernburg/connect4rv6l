@@ -1,4 +1,5 @@
 import {GameManager, gameStates} from "./game/game_manager.ts";
+import {getTelemetry, listSymbolsForExplorer, readSymbolsForExplorer} from "./rv6l_telemetry.ts";
 import express from 'express';
 import WebSocket from 'ws';
 import {resetGame, setBoard} from './game/game.ts';
@@ -201,6 +202,23 @@ async function handleControlPanelMessage(ws: WebSocket, data: any) {
                 });
             }
         },
+        // read only access to the controller's symbols for the variable explorer
+        async list_symbols(payload) {
+            try {
+                const symbols = await listSymbolsForExplorer(payload.listType);
+                ws.send(JSON.stringify({type: "symbolList", listType: payload.listType, symbols}));
+            } catch (error) {
+                ws.send(JSON.stringify({type: "symbolList", listType: payload.listType, error: String(error)}));
+            }
+        },
+        async read_symbols(payload) {
+            try {
+                const values = await readSymbolsForExplorer(payload.names);
+                ws.send(JSON.stringify({type: "symbolValues", values}));
+            } catch (error) {
+                ws.send(JSON.stringify({type: "symbolValues", error: String(error)}));
+            }
+        },
         async start_identify() {
             toggleIdentifyModeOnDisplay(true);
         },
@@ -327,7 +345,7 @@ function sendControlPanelState(ws: WebSocket) {
                 redChipsLeft: RV6L_STATE.redChipsLeft,
                 mock: RV6L_STATE.mock,
                 state: RV6L_STATE.state,
-
+                telemetry: getTelemetry(),
             },
             qrCodeLink: FRONTEND_ADDRESS + "/play?sessionID=" + sessionState.currentSessionID,
             errors: errors,
