@@ -1,7 +1,7 @@
 "use client";
 
 
-import {createContext, useState} from "react";
+import {createContext, useCallback, useRef, useState} from "react";
 import useWebSocket from "react-use-websocket";
 import {GameData} from "@/app/models/GameData";
 import { toast } from "sonner";
@@ -9,6 +9,9 @@ import { toast } from "sonner";
 
 export const GameDataContext = createContext<GameData | null>(null);
 export const WebsocketSendContext = createContext<((message:string)=>void) | null>(null);
+// Lets components receive replies that are not part of the regular state, e.g. the variable explorer
+type MessageHandler = (message: {type: string, [key: string]: unknown}) => void;
+export const WebsocketSubscribeContext = createContext<((handler: MessageHandler) => () => void) | null>(null);
 
 export default function WebsocketProvider({
   children,
@@ -16,6 +19,11 @@ export default function WebsocketProvider({
   children: React.ReactNode;
 }) {
     const [gameData, setGameData] = useState<GameData | null>(null);
+    const handlers = useRef(new Set<MessageHandler>());
+    const subscribe = useCallback((handler: MessageHandler) => {
+        handlers.current.add(handler);
+        return () => { handlers.current.delete(handler); };
+    }, []);
 
     const {
         sendMessage,
@@ -47,6 +55,8 @@ export default function WebsocketProvider({
                       color: data.error.errorType === 0?'#fff':'#000',
                     },
                   });
+                } else {
+                  handlers.current.forEach((handler) => handler(data));
                 }
 
                 console.log('Received message:', data);
@@ -64,8 +74,9 @@ export default function WebsocketProvider({
   return (
     <GameDataContext value={gameData!}>
         <WebsocketSendContext value={sendMessage}>
-
+          <WebsocketSubscribeContext value={subscribe}>
       <div className="flex-1 flex flex-col overflow-y-auto">{children}</div>
+          </WebsocketSubscribeContext>
         </WebsocketSendContext>
     </GameDataContext>
   );

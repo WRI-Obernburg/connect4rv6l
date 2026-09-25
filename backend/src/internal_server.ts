@@ -1,4 +1,5 @@
 import {GameManager, gameStates} from "./game/game_manager.ts";
+import {getTelemetry, listSymbolsForExplorer, readSymbolsForExplorer} from "./rv6l_telemetry.ts";
 import express from 'express';
 import WebSocket from 'ws';
 import {resetGame, setBoard} from './game/game.ts';
@@ -95,7 +96,10 @@ async function handleControlCommand(data: any) {
             sendStateToControlPanelClient!();
         },
         async clean_board_at(payload) {
-            if (payload.x == null || payload.y == null) {
+            // x/y are sent to the robot, only allow real board positions
+            const isValidPosition = Number.isInteger(payload.x) && payload.x >= 0 && payload.x <= 6
+                && Number.isInteger(payload.y) && payload.y >= 0 && payload.y <= 5;
+            if (!isValidPosition) {
                 logEvent({
                     description: 'Invalid coordinates for cleanBoardAt command: ' + JSON.stringify({
                         x: payload.x,
@@ -196,6 +200,23 @@ async function handleControlPanelMessage(ws: WebSocket, data: any) {
                     errorType: ErrorType.WARNING,
                     date: new Date().toString()
                 });
+            }
+        },
+        // read only access to the controller's symbols for the variable explorer
+        async list_symbols(payload) {
+            try {
+                const symbols = await listSymbolsForExplorer(payload.listType);
+                ws.send(JSON.stringify({type: "symbolList", listType: payload.listType, symbols}));
+            } catch (error) {
+                ws.send(JSON.stringify({type: "symbolList", listType: payload.listType, error: String(error)}));
+            }
+        },
+        async read_symbols(payload) {
+            try {
+                const values = await readSymbolsForExplorer(payload.names);
+                ws.send(JSON.stringify({type: "symbolValues", values}));
+            } catch (error) {
+                ws.send(JSON.stringify({type: "symbolValues", error: String(error)}));
             }
         },
         async start_identify() {
@@ -324,7 +345,7 @@ function sendControlPanelState(ws: WebSocket) {
                 redChipsLeft: RV6L_STATE.redChipsLeft,
                 mock: RV6L_STATE.mock,
                 state: RV6L_STATE.state,
-
+                telemetry: getTelemetry(),
             },
             qrCodeLink: FRONTEND_ADDRESS + "/play?sessionID=" + sessionState.currentSessionID,
             errors: errors,

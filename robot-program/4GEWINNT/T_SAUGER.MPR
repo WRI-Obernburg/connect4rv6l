@@ -1,0 +1,9 @@
+MPR "T_SAUGER"
+VAR Name:T_Sauger
+KOPIERE Quelle:_TNULL,Ziel_Var:T_Sauger
+KOPIERE Quelle:126,Ziel_Var:T_Sauger.z
+C Wert fr den kurzen blauen Saugtrichter. 125 mm
+C 2026-09-09 wegen dickerer Scheiben + 1 mm
+WERKZEUG Variable:T_Sauger
+STOP
+END

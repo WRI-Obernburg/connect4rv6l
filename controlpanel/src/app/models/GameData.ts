@@ -16,6 +16,22 @@ export enum ErrorType {
     FATAL, WARNING, INFO
 }
 
+export interface TelemetryValue {
+    id: string
+    group: string
+    label: string
+    symbol: string
+    kind: "number" | "flag" | "position" | "bits" | "text"
+    unit?: string
+    note?: string
+    available: boolean
+    value: number | string | null
+    alarm: boolean
+    alarmText?: string
+    severity?: "fatal" | "warning"
+    position?: { x: number, y: number, z: number, axes: number[] }
+}
+
 export interface GameData {
     gameState: {
         isPlayerConnected: boolean
@@ -53,7 +69,11 @@ export interface GameData {
         blueChipsLeft: number,
         redChipsLeft: number,
         mock: boolean,
-        state: string
+        state: string,
+        telemetry?: {
+            updatedAt: string | null
+            values: TelemetryValue[]
+        }
     },
     qrCodeLink: string,
     errors: ErrorDescription[],

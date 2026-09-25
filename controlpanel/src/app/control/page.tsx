@@ -6,6 +6,7 @@ import {useContext} from "react";
 import {GameDataContext, WebsocketSendContext} from "@/provider/WebsocketProvider";
 import {Checkbox} from "@/components/ui/checkbox";
 import {GameData} from "@/app/models/GameData";
+import {RobotTelemetry, VariableExplorer} from "@/app/control/RobotTelemetry";
 
 import {
     Dialog,
@@ -25,6 +26,7 @@ export default function ManualControlPage() {
     }
 
     return (
+        <div className={"flex flex-col gap-4"}>
         <Card>
             <CardHeader>
                 <CardTitle>Manuelle Steuerung</CardTitle>
@@ -51,6 +53,10 @@ export default function ManualControlPage() {
                     Error Zustand zu versetzen, um ungewollte Steuereingaben zu vermeinden</p>
             </CardFooter>
         </Card>
+        <RobotTelemetry telemetry={gameDataContext!.rv6l.telemetry} connected={gameDataContext!.rv6l.connected}
+                        mock={gameDataContext!.rv6l.mock}/>
+        <VariableExplorer/>
+        </div>
     );
 }
 
