@@ -10,7 +10,8 @@ type GameFieldProps = {
 };
 
 function RenderCell({ entryState, highlight, xl }: { entryState: number | null; highlight?: boolean, xl:boolean }) {
-  const size = xl ? "w-20 h-20" : "w-10 h-10";
+  // on phones the cells scale with the board width instead of a fixed size
+  const size = xl ? "w-20 h-20" : "w-full aspect-square";
   return (
     <div className={cn("relative", size)}>
       <div className={cn(size, "rounded-full hole")} />
@@ -21,7 +22,7 @@ function RenderCell({ entryState, highlight, xl }: { entryState: number | null; 
           exit={{ opacity: 0, y: -20 }}
           transition={{ duration: 0.4, type: "spring", bounce: 0.3 }}
           className={cn(
-            size, "absolute inset-0 rounded-full",
+            "absolute inset-0 rounded-full",
             entryState === 1 ? "chip-red" : entryState === 2 ? "chip-blue" : "",
             highlight && "ring-[3px] ring-white"
           )}
@@ -68,11 +69,11 @@ function getWinningCells(board: Dict<number[]> | null): [number, number][] | nul
 export function GameField(props: GameFieldProps) {
   const winningCells = getWinningCells(props.board);
   const canPlay = props.interactive && !!props.isPlayerTurn;
-  const gap = props.xl ? "gap-4" : "gap-2";
+  const gap = props.xl ? "gap-4" : "gap-1.5";
 
   return (
-    <div className="flex flex-col justify-center w-fit self-center">
-      <div className={cn("flex flex-row justify-center board", props.xl ? "p-6 rounded-3xl gap-4" : "p-2.5 rounded-2xl gap-2")}>
+    <div className={cn("flex flex-col justify-center", props.xl ? "w-fit self-center" : "w-full")}>
+      <div className={cn("board", props.xl ? "flex flex-row justify-center p-6 rounded-3xl gap-4" : "grid grid-cols-7 p-2 rounded-2xl gap-1.5")}>
         {Array.from({ length: 7 }).map((_, colIdx) => {
           const full = props.board != null && props.board[colIdx] != null && props.board[colIdx]!.length >= 6;
           const clickable = canPlay && !full;

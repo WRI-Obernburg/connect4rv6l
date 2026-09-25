@@ -32,17 +32,17 @@ export default function RootLayout({
           <div className="absolute inset-0 bg-blueprint" />
         </div>
 
-        <header className="relative z-10 mx-auto w-full max-w-xl px-6 pt-6">
+        <header className="relative z-10 mx-auto w-full max-w-xl px-4 sm:px-6 pt-6">
           <a href="https://wri-obernburg.de" target="_blank" rel="noopener noreferrer" aria-label="Walter Reis Institut" className="inline-block">
             <Image src="/wri-logo-white.svg" alt="Walter Reis Institut" width={120} height={40} priority />
           </a>
         </header>
-        <main className="relative z-10 flex-1 mx-auto w-full max-w-xl px-6 pb-10">
+        <main className="relative z-10 flex-1 mx-auto w-full max-w-xl px-4 sm:px-6 pb-10">
           <Suspense>
             {children}
           </Suspense>
         </main>
-        <footer className="relative z-10 mx-auto w-full max-w-xl px-6 py-6 text-sm text-wri-grey">
+        <footer className="relative z-10 mx-auto w-full max-w-xl px-4 sm:px-6 py-6 text-sm text-wri-grey">
           Walter Reis Institut für Technologie, Obernburg
         </footer>
       </body>

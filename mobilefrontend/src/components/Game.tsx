@@ -112,12 +112,12 @@ export default function Game(props: { sessionID: string, indoor: boolean }) {
 
     const isPlayerTurn = gameState.stateName === "PLAYER_SELECTION";
 
-    return <div className="panel rounded-2xl p-4 mt-8 flex flex-col gap-4">
+    return <div className="panel rounded-2xl p-3 sm:p-4 mt-8 flex flex-col gap-4">
         <CurrentAction gameState={gameState} />
 
         <GameField board={gameBoard} interactive={true} xl={false} onColumnClick={handleColumnClick} isPlayerTurn={isPlayerTurn} />
 
-        <div className="flex items-center justify-between gap-3 pt-1">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-1">
             <DifficultyChooser gameState={gameState} onDifficultyChange={handleDifficultyChange} ></DifficultyChooser>
             <StartGame onGameStart={() => {
                 sendJsonMessage({
@@ -163,7 +163,7 @@ function StartGame(props: { onGameStart: () => void, gameState: string }) {
     if (props.gameState != "IDLE") {
         return <AlertDialog>
             <AlertDialogTrigger asChild>
-                <Button disabled={!isRestartable} variant="ghost" className="text-wri-petrol/80 hover:text-wri-petrol hover:bg-wri-petrol/5 font-bold px-3 rounded-lg">Neu starten</Button>
+                <Button disabled={!isRestartable} variant="ghost" className="w-full sm:w-auto text-wri-petrol/80 hover:text-wri-petrol hover:bg-wri-petrol/5 font-bold px-3 rounded-lg">Neu starten</Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
                 <AlertDialogHeader>
