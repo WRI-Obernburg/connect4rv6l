@@ -28,8 +28,16 @@ export interface TelemetryValue {
     value: number | string | null
     alarm: boolean
     alarmText?: string
+    okText?: string
     severity?: "fatal" | "warning"
     position?: { x: number, y: number, z: number, axes: number[] }
+}
+
+export interface ControllerMessage {
+    number: number
+    source: "active" | "displayed"
+    level: string | null
+    reference: { code: string, message: string, cause: string, remedy: string } | null
 }
 
 export interface GameData {
@@ -73,6 +81,7 @@ export interface GameData {
         telemetry?: {
             updatedAt: string | null
             values: TelemetryValue[]
+            messages?: ControllerMessage[]
         }
     },
     qrCodeLink: string,

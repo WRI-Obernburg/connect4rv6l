@@ -4,16 +4,19 @@ import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {Checkbox} from "@/components/ui/checkbox";
-import {TelemetryValue} from "@/app/models/GameData";
+import {ControllerMessage, TelemetryValue} from "@/app/models/GameData";
 import {WebsocketSendContext, WebsocketSubscribeContext} from "@/provider/WebsocketProvider";
 
 const GROUP_ORDER = ["Störungen", "Steuerung", "Programm", "Bewegung", "Ein-/Ausgänge", "SPS-Rohwerte"];
 
-export function RobotTelemetry(props: { telemetry?: { updatedAt: string | null, values: TelemetryValue[] }, connected: boolean, mock: boolean }) {
+type Telemetry = { updatedAt: string | null, values: TelemetryValue[], messages?: ControllerMessage[] };
+
+export function RobotTelemetry(props: { telemetry?: Telemetry, connected: boolean, mock: boolean }) {
     const now = useNow();
     const values = props.telemetry?.values ?? [];
     const age = props.telemetry?.updatedAt ? Math.round((now - new Date(props.telemetry.updatedAt).getTime()) / 1000) : null;
-    const active = values.filter((v) => v.available && v.alarm);
+    // the controller messages have their own box with explanation, so they are not repeated in the lists
+    const active = values.filter((v) => v.available && v.alarm && v.group !== "Meldung");
     const faults = active.filter((v) => v.severity === "fatal");
     const warnings = active.filter((v) => v.severity !== "fatal");
 
@@ -26,37 +29,104 @@ export function RobotTelemetry(props: { telemetry?: { updatedAt: string | null, 
         <CardHeader>
             <CardTitle>Robotertelemetrie</CardTitle>
             <p className={"text-sm text-gray-500"}>{status}. Wird jede Sekunde von der Steuerung gelesen.</p>
-            {faults.length > 0 && <div className={"mt-2 rounded-md bg-red-500 p-3 text-white"}>
-                <p className={"font-bold"}>{faults.length === 1 ? "1 Störung" : `${faults.length} Störungen`}</p>
-                <ul className={"list-disc pl-5"}>
-                    {faults.map((a) => <li key={a.id}>{a.alarmText ?? a.label}</li>)}
-                </ul>
-            </div>}
-            {warnings.length > 0 && <div className={"mt-2 rounded-md bg-yellow-100 p-3 text-yellow-900"}>
-                <p className={"font-bold"}>{warnings.length === 1 ? "1 Warnung" : `${warnings.length} Warnungen`}</p>
-                <ul className={"list-disc pl-5"}>
-                    {warnings.map((a) => <li key={a.id}>{a.alarmText ?? a.label}</li>)}
-                </ul>
-            </div>}
+            {faults.length > 0 && <AlarmBox tone={"fatal"} title={faults.length === 1 ? "1 Störung" : `${faults.length} Störungen`} items={faults}/>}
+            {warnings.length > 0 && <AlarmBox tone={"warning"} title={warnings.length === 1 ? "1 Warnung" : `${warnings.length} Warnungen`} items={warnings}/>}
         </CardHeader>
-        <CardContent className={"grid grid-cols-1 gap-4 xl:grid-cols-2"}>
-            {GROUP_ORDER.map((group) => {
-                const items = values.filter((v) => v.group === group);
-                if (items.length === 0) return null;
-                return <Card key={group} className={"p-4 gap-3"}>
-                    <CardTitle>{group}</CardTitle>
-                    {group === "Bewegung" ? <MotionGroup items={items}/> :
-                        <div className={"flex flex-col gap-1"}>
-                            {items.map((item) => <TelemetryRow key={item.id} item={item}/>)}
-                        </div>}
-                </Card>;
-            })}
+        <CardContent className={"flex flex-col gap-4"}>
+            <ControllerMessages messages={props.telemetry?.messages ?? []} available={values.length > 0}/>
+            <div className={"grid grid-cols-1 gap-4 xl:grid-cols-2"}>
+                {GROUP_ORDER.map((group) => {
+                    const items = values.filter((v) => v.group === group);
+                    if (items.length === 0) return null;
+                    return <Card key={group} className={"p-4 gap-3"}>
+                        <CardTitle>{group}</CardTitle>
+                        {group === "Bewegung" ? <MotionGroup items={items}/> :
+                            <div className={"flex flex-col gap-1"}>
+                                {combineAxisCollisions(items).map((item) => item.okText !== undefined
+                                    ? <StatusRow key={item.id} item={item}/>
+                                    : <TelemetryRow key={item.id} item={item}/>)}
+                            </div>}
+                    </Card>;
+                })}
+            </div>
         </CardContent>
     </Card>;
 }
 
+function AlarmBox(props: { tone: "fatal" | "warning", title: string, items: TelemetryValue[] }) {
+    const style = props.tone === "fatal" ? "bg-red-500 text-white" : "bg-yellow-100 text-yellow-900";
+    return <div className={`mt-2 rounded-md p-3 ${style}`}>
+        <p className={"font-bold"}>{props.title}</p>
+        <ul className={"list-disc pl-5"}>
+            {props.items.map((a) => <li key={a.id}>{a.alarmText ?? a.label}</li>)}
+        </ul>
+    </div>;
+}
+
+const LEVEL_STYLE: Record<string, string> = {
+    Error: "border-red-300 bg-red-50",
+    Warning: "border-yellow-300 bg-yellow-50",
+};
+
+// Messages of the controller with the explanation from the Reis error reference
+function ControllerMessages(props: { messages: ControllerMessage[], available: boolean }) {
+    if (!props.available) return null;
+    if (props.messages.length === 0) {
+        return <div className={"rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800"}>
+            Die Steuerung meldet keine Fehler.
+        </div>;
+    }
+    return <div className={"flex flex-col gap-2"}>
+        {props.messages.map((m) => <div key={m.source + m.number}
+                                        className={`rounded-md border p-3 ${LEVEL_STYLE[m.level ?? ""] ?? "border-blue-200 bg-blue-50"}`}>
+            <p className={"text-xs uppercase tracking-wide text-gray-500"}>
+                {m.source === "displayed" ? "Meldung am Bedienpanel" : "Weiterer aktiver Fehler"}{m.level ? ` · ${m.level}` : ""}
+            </p>
+            <p className={"font-bold"}>S{m.number}{m.reference ? `: ${m.reference.message}` : ""}</p>
+            {m.reference ? <div className={"mt-1 grid grid-cols-1 gap-x-6 gap-y-1 text-sm md:grid-cols-2"}>
+                {m.reference.cause && <p><span className={"text-gray-500"}>Ursache: </span>{m.reference.cause}</p>}
+                {m.reference.remedy && <p><span className={"text-gray-500"}>Abhilfe: </span>{m.reference.remedy}</p>}
+            </div> : <p className={"text-sm text-gray-500"}>Nicht in der Reis-Fehlerliste (rsv-fehlermeldungen.pdf) enthalten.</p>}
+        </div>)}
+    </div>;
+}
+
+// Six rows "Kollision Achse n: keine" say little, show one row that names the affected axes
+function combineAxisCollisions(items: TelemetryValue[]): TelemetryValue[] {
+    const axes = items.filter((i) => i.id.startsWith("collision_axis_"));
+    if (axes.length === 0) return items;
+    const hit = axes.filter((a) => a.available && a.alarm);
+    const combined: TelemetryValue = {
+        ...axes[0], id: "collision_axes", label: "Kollision je Achse",
+        available: axes.some((a) => a.available), alarm: hit.length > 0,
+        value: hit.length, okText: "keine",
+        alarmText: `an Achse ${hit.map((a) => a.id.replace("collision_axis_", "")).join(", ")}`,
+        note: "Merker M1592.0 bis M1592.5",
+    };
+    const first = items.indexOf(axes[0]);
+    return [...items.slice(0, first), combined, ...items.filter((i) => !i.id.startsWith("collision_axis_") && items.indexOf(i) > first)];
+}
+
+// Checks like "Druckluft" show a clear state instead of a raw number; the raw value is in the tooltip
+function StatusRow({item}: { item: TelemetryValue }) {
+    const technical = `${item.symbol || item.label} = ${String(item.value ?? "–")}${item.note ? `\n${item.note}` : ""}`;
+    let badge = <span className={"text-xs text-gray-400"}>nicht verfügbar</span>;
+    if (item.available && item.alarm) {
+        const tone = item.severity === "fatal" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-800";
+        badge = <span className={`rounded-full px-2 py-0.5 text-sm font-semibold ${tone}`}>{item.alarmText ?? "Störung"}</span>;
+    } else if (item.available) {
+        badge = <span className={"flex items-center gap-2 text-sm text-green-700"}>
+            <span className={"inline-block h-2.5 w-2.5 rounded-full bg-green-500"}/>{item.okText}
+        </span>;
+    }
+    return <div className={"flex items-center justify-between gap-3 border-b border-gray-100 py-1.5 last:border-0"} title={technical}>
+        <span className={"text-sm"}>{item.label}</span>
+        {badge}
+    </div>;
+}
+
 function TelemetryRow({item}: { item: TelemetryValue }) {
-    return <div className={"flex flex-col gap-1 border-b border-gray-100 py-1 last:border-0"} title={item.note ?? item.symbol}>
+    return <div className={"flex flex-col gap-1 border-b border-gray-100 py-1 last:border-0"} title={item.symbol}>
         <div className={"flex items-center justify-between gap-3"}>
             <span className={"text-sm"}>{item.label}</span>
             <ValueDisplay item={item}/>
@@ -69,15 +139,17 @@ function TelemetryRow({item}: { item: TelemetryValue }) {
 function ValueDisplay({item}: { item: TelemetryValue }) {
     if (!item.available) return <span className={"text-xs text-gray-400"}>nicht verfügbar</span>;
     if (item.kind === "flag") {
-        const color = item.alarm ? (item.severity === "fatal" ? "bg-red-500" : "bg-yellow-400") : item.value ? "bg-green-500" : "bg-gray-300";
         return <span className={"flex items-center gap-2 text-sm font-mono"}>
-            <span className={`inline-block h-3 w-3 rounded-full ${color}`}/>{String(item.value)}
+            <span className={`inline-block h-3 w-3 rounded-full ${item.value ? "bg-green-500" : "bg-gray-300"}`}/>{item.value ? "an" : "aus"}
         </span>;
     }
     if (item.kind === "bits") return <span className={"text-sm font-mono"}>{String(item.value)}</span>;
     if (item.kind === "text") return <span className={"text-sm font-mono"}>{String(item.value) || "–"}</span>;
-    const alarmColor = item.alarm ? (item.severity === "fatal" ? "text-red-600 font-bold" : "text-yellow-600 font-bold") : "";
-    return <span className={`text-sm font-mono ${alarmColor}`}>{formatNumber(item.value)}{item.unit ? ` ${item.unit}` : ""}</span>;
+    if (item.alarm) {
+        const tone = item.severity === "fatal" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-800";
+        return <span className={`rounded-full px-2 py-0.5 text-sm font-semibold ${tone}`}>{item.alarmText ?? formatNumber(item.value)}</span>;
+    }
+    return <span className={"text-sm font-mono"}>{formatNumber(item.value)}{item.unit ? ` ${item.unit}` : ""}</span>;
 }
 
 // Bit 0 on the right like in the controller's documentation

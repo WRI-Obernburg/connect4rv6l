@@ -1,6 +1,7 @@
 import { getSymbolList, readSymbol, readSymbols, RV6L_STATE, type SymbolListType } from "./rv6l_client.ts";
 import { ErrorType, logEvent } from "./errorHandler/error_handler.ts";
 import { sendStateToControlPanelClient } from "./internal_server.ts";
+import { lookupRsvError, type RsvError } from "./rsv_errors.ts";
 
 /**
  * Reads the state of the RV6L controller once per second for the control panel and reports
@@ -32,6 +33,8 @@ type TelemetryItem = {
     severity?: Severity,
     // describes the problem, e.g. "Roboterprogramm läuft nicht" instead of the item's label
     alarmText?: string,
+    // shown instead of the raw value while everything is fine, e.g. "läuft"
+    okText?: string,
     note?: string,
 };
 
@@ -47,6 +50,7 @@ export type TelemetryValue = {
     value: number | string | null,
     alarm: boolean,
     alarmText?: string,
+    okText?: string,
     severity?: Severity,
     position?: { x: number, y: number, z: number, axes: number[] },
 };
@@ -63,7 +67,7 @@ const ITEMS: TelemetryItem[] = [
     { id: "safety_controller", group: "Steuerung", label: "Safety-Controller Status", symbol: "_ISC_STATUS_INTERN", kind: "bits" },
     { id: "ups", group: "Steuerung", label: "USV-Status", symbol: "_IUPS_STATUS", kind: "bits" },
 
-    { id: "program_running", group: "Programm", label: "Roboterprogramm läuft (M935.6)", ...flag(935, 6), kind: "flag", alarmWhen: 0, severity: "warning", alarmText: "Roboterprogramm läuft nicht" },
+    { id: "program_running", group: "Programm", label: "Roboterprogramm", ...flag(935, 6), kind: "flag", alarmWhen: 0, severity: "warning", okText: "läuft", alarmText: "Roboterprogramm läuft nicht", note: "Merker M935.6" },
     { id: "start_request", group: "Programm", label: "Start-Anforderung (M968.1)", ...flag(968, 1), kind: "flag" },
     { id: "stop_request", group: "Programm", label: "Stopp-Anforderung (M968.2)", ...flag(968, 2), kind: "flag" },
     // total part counters of the pallets (PALETTE_BLAU/ROT.MPR): 21 after #INIT, every PALETTE #EIN counts
@@ -75,19 +79,23 @@ const ITEMS: TelemetryItem[] = [
     { id: "field_x", group: "Programm", label: "Feld X (IX_Feld)", symbol: "IX_Feld", kind: "number" },
     { id: "field_z", group: "Programm", label: "Feld Z (IZ_Feld)", symbol: "IZ_Feld", kind: "number" },
 
-    { id: "collective_fault", group: "Störungen", label: "Sammelstörung (M1012.2)", ...flag(1012, 2), kind: "flag", alarmWhen: 1, severity: "fatal", alarmText: "Sammelstörung aktiv" },
+    { id: "collective_fault", group: "Störungen", label: "Sammelstörung", ...flag(1012, 2), kind: "flag", alarmWhen: 1, severity: "fatal", okText: "keine", alarmText: "Sammelstörung aktiv", note: "Merker M1012.2" },
     // the input of the pressure switch is set in the machine data IBIN_FUNC_IN[1], which cannot be read
     // via the interface, so missing air is detected by the controller's message S19
-    { id: "compressed_air", group: "Störungen", label: "Druckluft fehlt (Meldung S19)", symbol: "_IACT_ERROR", kind: "number", alarmValues: [19], severity: "fatal", alarmText: "Druckluft fehlt (S19)" },
-    { id: "active_message", group: "Störungen", label: "Aktive Meldung der Steuerung (Nummer)", symbol: "_IACT_ERROR", kind: "number", alarmWhenNotZero: true, severity: "warning", alarmText: "Steuerung meldet #{value}", note: "Nummer in rsv-fehlermeldungen.pdf nachschlagen, z. B. 84 = USV-Batterie defekt" },
-    { id: "active_message_text", group: "Störungen", label: "Angezeigte Meldung", symbol: "_SDISP_ERROR", kind: "text" },
-    { id: "safety_controller_error", group: "Störungen", label: "Safety-Controller Fehler (_ISC_ERROR[1])", symbol: "_ISC_ERROR[1]", kind: "number", alarmWhenNotZero: true, severity: "fatal", alarmText: "Safety-Controller meldet Fehler {value}" },
-    { id: "collision", group: "Störungen", label: "Kollision erkannt (M970.3)", ...flag(970, 3), kind: "flag", alarmWhen: 1, severity: "fatal", alarmText: "Kollision erkannt" },
-    { id: "collision_detection", group: "Störungen", label: "Kollisionserkennung aktiv (M970.2)", ...flag(970, 2), kind: "flag", alarmWhen: 0, severity: "warning", alarmText: "Kollisionserkennung ist ausgeschaltet" },
+    { id: "compressed_air", group: "Störungen", label: "Druckluft", symbol: "_IACT_ERROR", kind: "number", alarmValues: [19], severity: "fatal", okText: "in Ordnung", alarmText: "Druckluft fehlt (Meldung S19)", note: "Erkannt über Meldung S19 der Steuerung" },
+    { id: "safety_controller_error", group: "Störungen", label: "Safety-Controller", symbol: "_ISC_ERROR[1]", kind: "number", alarmWhenNotZero: true, severity: "fatal", okText: "kein Fehler", alarmText: "Safety-Controller meldet Fehler {value}" },
+    { id: "collision", group: "Störungen", label: "Kollision", ...flag(970, 3), kind: "flag", alarmWhen: 1, severity: "fatal", okText: "keine", alarmText: "Kollision erkannt", note: "Merker M970.3" },
     ...[1, 2, 3, 4, 5, 6].map((axis): TelemetryItem => ({
-        id: `collision_axis_${axis}`, group: "Störungen", label: `Kollision Achse ${axis} (M1592.${axis - 1})`,
-        ...flag(1592, axis - 1), kind: "flag", alarmWhen: 1, severity: "fatal", alarmText: `Kollision an Achse ${axis}`,
+        id: `collision_axis_${axis}`, group: "Störungen", label: `Kollision Achse ${axis}`,
+        ...flag(1592, axis - 1), kind: "flag", alarmWhen: 1, severity: "fatal", okText: "keine", alarmText: `Kollision an Achse ${axis}`,
+        note: `Merker M1592.${axis - 1}`,
     })),
+    { id: "collision_detection", group: "Störungen", label: "Kollisionserkennung", ...flag(970, 2), kind: "flag", alarmWhen: 0, severity: "warning", okText: "eingeschaltet", alarmText: "Kollisionserkennung ist ausgeschaltet", note: "Merker M970.2" },
+
+    // messages of the controller, shown with the explanation from the Reis error reference
+    { id: "active_message", group: "Meldung", label: "Aktiver Fehler", symbol: "_IACT_ERROR", kind: "number", alarmWhenNotZero: true, severity: "warning", alarmText: "Steuerung meldet S{value}" },
+    { id: "displayed_message", group: "Meldung", label: "Am Bedienpanel angezeigte Meldung", symbol: "_IDISP_ERROR", kind: "number" },
+    { id: "displayed_message_text", group: "Meldung", label: "Text am Bedienpanel", symbol: "_SDISP_ERROR", kind: "text" },
 
     { id: "position", group: "Bewegung", label: "Istposition (_PACTPOS)", symbol: "_PACTPOS", kind: "position" },
     ...[1, 2, 3, 4, 5, 6].map((axis): TelemetryItem => ({
@@ -122,8 +130,33 @@ let pollRunning = false;
 let lastPollError = "";
 const alarmActive = new Map<string, boolean>();
 
+export type ControllerMessage = {
+    number: number,
+    source: "active" | "displayed",
+    level: string | null,
+    reference: RsvError | null,
+};
+
 export function getTelemetry() {
-    return { updatedAt, values };
+    return { updatedAt, values, messages: getMessages() };
+}
+
+// The controller keeps the active error (_IACT_ERROR) and the message shown on the pendant (_IDISP_ERROR)
+// separately, e.g. S84 active while "Error #21" is displayed, so both are explained
+function getMessages(): ControllerMessage[] {
+    const numberOf = (id: string) => Number(values.find((v) => v.id === id && v.available)?.value ?? 0);
+    const displayedText = String(values.find((v) => v.id === "displayed_message_text")?.value ?? "");
+    const messages: ControllerMessage[] = [];
+    const displayed = numberOf("displayed_message");
+    if (displayed) {
+        const level = /^(\w+)\s*#/.exec(displayedText)?.[1] ?? null;
+        messages.push({ number: displayed, source: "displayed", level, reference: lookupRsvError(displayed) });
+    }
+    const active = numberOf("active_message");
+    if (active && active !== displayed) {
+        messages.push({ number: active, source: "active", level: null, reference: lookupRsvError(active) });
+    }
+    return messages;
 }
 
 export function initTelemetry() {
@@ -175,7 +208,8 @@ async function poll() {
     }
 
     values = ITEMS.map((item) => toValue(item, item.symbol in raw ? raw[item.symbol] : undefined))
-        .map((value) => withBackendChipCount(value));
+        .map((value) => withBackendChipCount(value))
+        .map((value) => withMessageText(value));
     updatedAt = new Date().toISOString();
     reportAlarms();
     sendStateToControlPanelClient?.();
@@ -201,8 +235,15 @@ function withBackendChipCount(value: TelemetryValue): TelemetryValue {
     return value;
 }
 
+// "Steuerung meldet S84" is not helpful on its own, add the text from the error reference
+function withMessageText(value: TelemetryValue): TelemetryValue {
+    if (value.id !== "active_message" || !value.alarm) return value;
+    const reference = lookupRsvError(Number(value.value));
+    return reference ? { ...value, alarmText: `${value.alarmText}: ${reference.message}` } : value;
+}
+
 function toValue(item: TelemetryItem, raw: string | undefined): TelemetryValue {
-    const value = toRawValue(item, raw);
+    const value = { ...toRawValue(item, raw), okText: item.okText };
     return value.alarm ? { ...value, alarmText: (item.alarmText ?? item.label).replace("{value}", String(value.value)) } : value;
 }
 
