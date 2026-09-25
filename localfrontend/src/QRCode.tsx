@@ -2,22 +2,22 @@ import QRCode from "react-qr-code";
 
 export default function QRCodeComponent(props: { qrCodeLink: string | null, isGameRunning: boolean }) {
     return (
-        <div className="flex flex-row items-center justify-center gap-16 w-screen">
-            
+        <div className="flex flex-row items-stretch justify-center gap-10">
             {
-                props.qrCodeLink && <QRCode value={props.qrCodeLink} className="h-[40rem] w-[40rem]"/>
+                props.qrCodeLink && <div className="panel rounded-3xl p-8 flex items-center">
+                    <QRCode value={props.qrCodeLink} fgColor="#0d4453" bgColor="transparent" className="h-[28rem] w-[28rem]"/>
+                </div>
             }
-            <div>
-                <p className="text-gray-600 text-7xl font-bold">RV6L-Gewinnt</p>
-                <p className="max-w-[40vw] text-3xl text-gray-500 mt-2">
-                    Scanne den QR-Code mit dem Handy um ein Spiel gegen den Roboter zu spielen.
+            <div className="panel rounded-3xl p-14 max-w-[44vw] flex flex-col justify-center">
+                <p className="text-7xl font-extrabold tracking-[-0.02em] leading-[1.02]">Spiel gegen den Roboter.</p>
+                <p className="text-3xl text-wri-grey mt-6 max-w-[30ch]">
+                    Scanne den Code mit deinem Handy. Du wählst die Spalte, der RV6L setzt die Chips auf das echte Spielfeld.
                 </p>
                 {
-                    props.isGameRunning && 
-                    <p className="pt-4 font-bold text-2xl">Verbindung verloren? Einfach QR-Code scannen und weiterspielen!</p>
+                    props.isGameRunning &&
+                    <p className="mt-8 text-2xl font-semibold text-wri-cyan-dark">Verbindung verloren? Code erneut scannen und weiterspielen.</p>
                 }
             </div>
         </div>
     );
 }
-
