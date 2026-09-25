@@ -3,8 +3,7 @@ import { ErrorType, logEvent } from "./errorHandler/error_handler.ts";
 import { sendStateToControlPanelClient } from "./internal_server.ts";
 import { lookupRsvError, type RsvError } from "./rsv_errors.ts";
 import { getLogbookSince } from "./rv6l_monitor.ts";
-import { recordEvent, setRobotReadyCheck, updateCondition, updateStartLock } from "./fault_memory.ts";
-import { state } from "./state.ts";
+import { recordEvent, updateCondition, updateLock } from "./fault_memory.ts";
 import { GameManager } from "./game/game_manager.ts";
 
 /**
@@ -56,7 +55,7 @@ export type TelemetryValue = {
     alarmText?: string,
     okText?: string,
     severity?: Severity,
-    // overrides the static list of critical items, e.g. robot readiness is only critical during a game
+    // overrides the static list of critical items
     critical?: boolean,
     position?: { x: number, y: number, z: number, axes: number[] },
 };
@@ -237,7 +236,7 @@ export function initTelemetry() {
 
 async function poll() {
     if (RV6L_STATE.mock || !RV6L_STATE.rv6l_connected) {
-        updateStartLock();
+        updateLock();
         if (wasConnected) {
             wasConnected = false;
             values = values.map((value) => ({ ...value, available: false, value: null, alarm: false }));
@@ -272,7 +271,7 @@ async function poll() {
     });
     const controller = await readControllerState();
     values = [
-        ...controllerValues(controller),
+        ...controllerValues(controller, programStarted(raw)),
         ...ITEMS.filter((item) => item.group !== "Grenzwerte")
             .map((item) => toValue(item, item.symbol in raw ? raw[item.symbol] : undefined))
             .map((value) => withBackendChipCount(value)),
@@ -284,30 +283,26 @@ async function poll() {
     checkActionAtStartup(raw["I_Aktion"]);
     reportAlarms();
     updateFaultMemory();
-    updateStartLock();
+    updateLock();
     sendStateToControlPanelClient?.();
 }
 
 // ---------------------------------------------------------------------------------------------
-// Robot readiness: the game needs drives on, AUTO mode, the game program running and override > 0
+// Robot readiness: the game needs drives on, AUTO mode and the game program running
 
-let readiness: { ready: boolean, reasons: string[] } = { ready: false, reasons: ["Noch keine Werte von der Steuerung"] };
-
-export function getRobotReadiness() {
-    if (RV6L_STATE.mock) return { ready: true, reasons: [] };
-    if (!RV6L_STATE.rv6l_connected) return { ready: false, reasons: ["Keine Verbindung zur Robotersteuerung"] };
-    return readiness;
+// M935.6 stays set while a program is started, also while it pauses between steps in T1 (the task state
+// of the interpreter flips between active and inactive there), so it tells whether the program runs
+function programStarted(raw: Record<string, string>): boolean | null {
+    const { symbol, bit } = flag(935, 6);
+    return symbol in raw ? ((Number(raw[symbol]) >>> bit) & 1) === 1 : null;
 }
 
-const isGameRunning = () => !["IDLE", "ERROR"].includes(state.stateName);
-
-function controllerValues(controller: ControllerState): TelemetryValue[] {
-    // not ready is a fault that stops the game while one is running, otherwise a warning that blocks the start
-    const during = isGameRunning();
+function controllerValues(controller: ControllerState, started: boolean | null): TelemetryValue[] {
+    // everything that prevents a game is a critical fault: it locks the game in ERROR until it is gone and acknowledged
     const status = (id: string, label: string, available: boolean, ok: boolean, okText: string, alarmText: string, note?: string): TelemetryValue => ({
         id, group: "Steuerung", label, symbol: "", kind: "text", note,
         available, value: ok ? okText : alarmText, alarm: available && !ok, okText, alarmText,
-        severity: during ? "fatal" : "warning", critical: during,
+        severity: "fatal", critical: true,
     });
 
     const mode = controller.runMode ?? "";
@@ -316,7 +311,7 @@ function controllerValues(controller: ControllerState): TelemetryValue[] {
     const program = controller.interpreter?.filename ?? "";
     const programName = program.split("/").pop() ?? program;
     const rightProgram = isGameProgramFile(program);
-    const running = controller.interpreter?.state === "active";
+    const running = started ?? controller.interpreter?.state === "active";
 
     const values = [
         status("drives_state", "Antriebe", controller.drives !== null, controller.drives === "On", "ein", "Antriebe aus"),
@@ -324,13 +319,10 @@ function controllerValues(controller: ControllerState): TelemetryValue[] {
             `Betriebsart ${mode}, das Spiel braucht AUTO`, "Nur in AUTO nimmt die Steuerung Befehle vom Backend an"),
         status("game_program", "Spielprogramm", controller.interpreter !== null, rightProgram && running,
             `${programName} läuft`,
-            !rightProgram ? `Falsches Programm angewählt: ${programName || "keins"}` : `${programName} läuft nicht (Interpreter ${controller.interpreter?.state})`,
+            !rightProgram ? `Falsches Programm angewählt: ${programName || "keins"}`
+                : `${programName} ist angehalten${controller.interpreter?.step ? ` (Zeile ${controller.interpreter.step})` : ""}`,
             `Erwartet: ${GAME_PROGRAM}`),
     ];
-    readiness = {
-        ready: values.every((v) => v.available && !v.alarm),
-        reasons: values.filter((v) => !v.available || v.alarm).map((v) => v.available ? v.alarmText! : `${v.label} unbekannt`),
-    };
     return values;
 }
 
@@ -349,7 +341,7 @@ function isGameProgramFile(filename: string) {
     return isSubprogram && (lastMainProgram === "" || lastMainProgram === GAME_PROGRAM);
 }
 
-setRobotReadyCheck(() => getRobotReadiness().ready);
+
 
 // ---------------------------------------------------------------------------------------------
 // Motor currents close to the drive limits

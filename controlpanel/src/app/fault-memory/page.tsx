@@ -1,5 +1,7 @@
 "use client";
-import {useContext} from "react";
+import {useContext, useState} from "react";
+import {Input} from "@/components/ui/input";
+import {Checkbox} from "@/components/ui/checkbox";
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
 import {GameDataContext, WebsocketSendContext} from "@/provider/WebsocketProvider";
@@ -13,7 +15,8 @@ export default function FaultMemoryPage() {
         return <div className={"flex justify-center h-screen w-full items-center text-3xl text-gray-700"}>Verbinden...</div>;
     }
 
-    const memory = gameData.faultMemory ?? {open: [], acknowledged: [], gameStartBlocked: false};
+    const memory = gameData.faultMemory ?? {open: [], acknowledged: [], lockReasons: []};
+    const locked = memory.lockReasons.length > 0;
     // active and critical faults first, newest first within each block
     const open = [...memory.open].sort((a, b) =>
         Number(b.active) - Number(a.active) || Number(b.critical) - Number(a.critical) || b.lastSeen.localeCompare(a.lastSeen));
@@ -26,16 +29,20 @@ export default function FaultMemoryPage() {
                 <CardTitle>Fehlerspeicher</CardTitle>
                 <p className={"text-sm text-gray-500"}>
                     Fehler bleiben hier gespeichert, auch wenn ihre Ursache wieder weg ist, und müssen quittiert werden.
-                    Quittieren geht erst, wenn der Fehler nicht mehr anliegt. Solange kritische Fehler offen sind, lassen sich keine neuen Spiele starten.
+                    Quittieren geht erst, wenn der Fehler nicht mehr anliegt. Solange ein kritischer Fehler offen ist, steht das
+                    Spiel im Zustand ERROR und verlässt ihn von selbst, sobald alle kritischen Fehler quittiert sind.
                 </p>
-                {memory.gameStartBlocked
+                {locked
                     ? <div className={"mt-2 rounded-md bg-red-500 p-3 text-white"}>
-                        <p className={"font-bold"}>Spielstart gesperrt</p>
-                        <p>Es gibt nicht quittierte kritische Fehler. Ursache beheben, prüfen und dann quittieren.</p>
+                        <p className={"font-bold"}>Spiel gesperrt (ERROR)</p>
+                        <ul className={"list-disc pl-5"}>{memory.lockReasons.map((reason, i) => <li key={i}>{reason}</li>)}</ul>
+                        <p className={"mt-1 text-sm"}>Ursache beheben, prüfen und dann quittieren.</p>
                     </div>
                     : <div className={"mt-2 rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800"}>
-                        Keine offenen kritischen Fehler, Spiele können gestartet werden.
+                        Keine offenen kritischen Fehler, das Spiel ist freigegeben.
                     </div>}
+                <ManualFaultForm onCreate={(title, details, critical) =>
+                    send?.(JSON.stringify({action: "create_manual_fault", title, details, critical}))}/>
             </CardHeader>
             <CardContent className={"flex flex-col gap-2"}>
                 <div className={"flex items-center justify-between"}>
@@ -60,6 +67,37 @@ export default function FaultMemoryPage() {
                 {memory.acknowledged.map((fault) => <FaultRow key={fault.key + fault.acknowledgedAt} fault={fault}/>)}
             </CardContent>
         </Card>
+    </div>;
+}
+
+// E.g. "Spielfeld wird repariert": locks the game until the fault is acknowledged again
+function ManualFaultForm(props: { onCreate: (title: string, details: string, critical: boolean) => void }) {
+    const [open, setOpen] = useState(false);
+    const [title, setTitle] = useState("");
+    const [details, setDetails] = useState("");
+    const [critical, setCritical] = useState(true);
+    if (!open) {
+        return <div><Button variant={"outline"} className={"mt-2 cursor-pointer"} onClick={() => setOpen(true)}>Fehler manuell anlegen</Button></div>;
+    }
+    const submit = () => {
+        if (!title.trim()) return;
+        props.onCreate(title.trim(), details.trim(), critical);
+        setTitle("");
+        setDetails("");
+        setOpen(false);
+    };
+    return <div className={"mt-2 flex flex-col gap-2 rounded-md border bg-gray-50 p-3"}>
+        <p className={"font-semibold"}>Fehler manuell anlegen</p>
+        <Input placeholder={"Titel, z. B. Spielfeld wird repariert"} value={title} onChange={(e) => setTitle(e.target.value)} autoFocus
+               onKeyDown={(e) => { if (e.key === "Enter") submit(); }}/>
+        <Input placeholder={"Details (optional)"} value={details} onChange={(e) => setDetails(e.target.value)}/>
+        <label className={"flex items-center gap-2 text-sm"}>
+            <Checkbox checked={critical} onCheckedChange={(c) => setCritical(c === true)}/> kritisch, sperrt das Spiel bis zum Quittieren
+        </label>
+        <div className={"flex gap-2"}>
+            <Button className={"cursor-pointer"} disabled={!title.trim()} onClick={submit}>Anlegen</Button>
+            <Button variant={"outline"} className={"cursor-pointer"} onClick={() => setOpen(false)}>Abbrechen</Button>
+        </div>
     </div>;
 }
 

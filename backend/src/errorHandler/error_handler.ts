@@ -1,4 +1,3 @@
-import { GameManager, gameStates } from "../game/game_manager";
 import { sendErrorToControlPanelClient } from "../internal_server";
 export interface ErrorDescription {
     errorType: ErrorType,
@@ -29,9 +28,7 @@ export async function logEvent(error: ErrorDescription) {
     //write to file
   //  await errorFile.write(JSON.stringify(errors))
 
-    if(error.errorType === ErrorType.FATAL) {
-        GameManager.switchState(gameStates.ERROR, error);
-    }
+    // Whether the game goes into ERROR is decided by the fault memory (GameManager.applyLock), not by log levels
 
 
     sendErrorToControlPanelClient(error);

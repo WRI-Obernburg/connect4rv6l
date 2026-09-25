@@ -1,6 +1,6 @@
 import {GameManager, gameStates} from "./game/game_manager.ts";
 import {getTelemetry, listSymbolsForExplorer, readSymbolsForExplorer} from "./rv6l_telemetry.ts";
-import {acknowledgeAllInactive, acknowledgeFault, getFaultMemory} from "./fault_memory.ts";
+import {acknowledgeAllInactive, acknowledgeFault, createManualFault, getFaultMemory} from "./fault_memory.ts";
 import {getCoincidence, getLogbook, getProgramSource, getSystemInfo, getTasks} from "./rv6l_monitor.ts";
 import express from 'express';
 import WebSocket from 'ws';
@@ -226,6 +226,11 @@ async function handleControlPanelMessage(ws: WebSocket, data: any) {
         },
         async acknowledge_all_faults() {
             acknowledgeAllInactive();
+        },
+        async create_manual_fault(payload) {
+            const title = String(payload.title ?? "").trim().slice(0, 200);
+            if (!title) return;
+            createManualFault(title, String(payload.details ?? "").trim().slice(0, 1000), payload.critical !== false);
         },
         // read only monitoring of the controller for the "Roboter-Monitor" page
         async monitor_tasks() {

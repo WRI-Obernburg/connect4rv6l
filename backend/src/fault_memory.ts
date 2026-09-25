@@ -1,12 +1,14 @@
 import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname } from "path";
 import { ErrorType, logEvent } from "./errorHandler/error_handler.ts";
-import { sendState, state } from "./state.ts";
+import { sendState } from "./state.ts";
 
 /**
  * Fault memory like in a car: a fault stays stored after its cause is gone and has to be
  * acknowledged in the control panel. It can only be acknowledged once it is no longer active.
- * Unacknowledged critical faults block the start of new games (see isGameStartBlocked).
+ * While a critical fault is open, the game is locked in the ERROR state; it leaves
+ * ERROR on its own once nothing is open any more (see getLockReasons and GameManager.applyLock).
+ * Faults can also be created by hand, e.g. "Spielfeld wird repariert", and are acknowledged like any other.
  *
  * Two kinds of entries:
  * - conditions (updateCondition): active as long as something is wrong, e.g. a collision flag
@@ -48,30 +50,36 @@ export function initFaultMemory() {
         open = [];
         acknowledged = [];
     }
-    state.gameStartBlocked = isGameStartBlocked();
 }
 
 export function getFaultMemory() {
-    return { open, acknowledged, gameStartBlocked: isGameStartBlocked() };
+    return { open, acknowledged, lockReasons: getLockReasons() };
 }
 
-export function isGameStartBlocked() {
-    return open.some((entry) => entry.critical);
+/**
+ * Why the game is locked in ERROR: every open critical fault, including a robot that is not ready (drives,
+ * operating mode, program, connection), which the telemetry reports as critical faults. Empty means free.
+ */
+export function getLockReasons(): string[] {
+    return open.filter((entry) => entry.critical).map((entry) => entry.title);
 }
 
-// The telemetry adds the live readiness of the robot (drives, mode, program) to the start lock
-let robotReady: () => boolean = () => true;
+// The game manager switches into and out of ERROR; registered here to avoid an import cycle
+let lockListener: ((reasons: string[]) => void) | null = null;
 
-export function setRobotReadyCheck(check: () => boolean) {
-    robotReady = check;
+export function onLockChange(listener: (reasons: string[]) => void) {
+    lockListener = listener;
 }
 
-export function updateStartLock() {
-    const blocked = isGameStartBlocked() || !robotReady();
-    if (state.gameStartBlocked !== blocked) {
-        state.gameStartBlocked = blocked;
-        sendState();
-    }
+export function updateLock() {
+    lockListener?.(getLockReasons());
+}
+
+/** A fault created by hand in the control panel, e.g. while the board is repaired; it is acknowledged like any other. */
+export function createManualFault(title: string, details: string | undefined, critical: boolean) {
+    recordEvent(`manual:${Date.now()}`, {
+        title, details: details || undefined, severity: critical ? "fatal" : "warning", critical, source: "Manuell angelegt",
+    });
 }
 
 /** Reports whether a condition is present right now; stores it the first time it becomes active. */
@@ -111,7 +119,7 @@ function store(key: string, info: FaultInfo, active: boolean) {
     if (info.critical) {
         logEvent({
             errorType: ErrorType.WARNING,
-            description: `Fehlerspeicher: ${info.title}. Neue Spiele sind gesperrt, bis der Fehler quittiert ist.`,
+            description: `Fehlerspeicher: ${info.title}. Das Spiel ist gesperrt, bis der Fehler quittiert ist.`,
             date: now
         });
     }
@@ -147,5 +155,5 @@ function changed() {
         console.error("Could not save the fault memory", error);
     }
     sendState();
-    updateStartLock();
+    updateLock();
 }

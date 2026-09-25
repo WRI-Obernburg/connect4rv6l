@@ -65,8 +65,10 @@ function SummaryTiles(props: { game: GameData, tasks?: TaskState[] }) {
         {label: "Antriebe", value: valueOf("drives_state"), tone: toneOf("drives_state")},
         // okText holds the plain mode, e.g. Test_1, which fits the tile better than the warning text
         {label: "Betriebsart", value: tile("run_mode")?.available ? tile("run_mode")!.okText ?? "–" : "–", tone: toneOf("run_mode")},
-        {label: "Programm", value: interpreter?.filename ? `${interpreter.filename.split("/").pop()} · ${interpreter.state}${interpreter.step ? ` · ${interpreter.step}` : ""}` : "–", tone: toneOf("game_program")},
-        {label: "Spielstart", value: props.game.gameState.gameStartBlocked ? "gesperrt" : "möglich", tone: props.game.gameState.gameStartBlocked ? "warn" : "ok"},
+        {label: "Programm", value: interpreter?.filename
+                ? `${interpreter.filename.split("/").pop()} · ${interpreter.state === "active" ? "läuft" : "angehalten"}${interpreter.step ? ` · Zeile ${interpreter.step}` : ""}`
+                : "–", tone: toneOf("game_program")},
+        {label: "Spiel", value: props.game.gameState.stateName === "ERROR" ? "gesperrt" : "freigegeben", tone: props.game.gameState.stateName === "ERROR" ? "error" : "ok"},
         {label: "Fehlerspeicher", value: open.length ? `${open.length} offen` : "leer", tone: open.some((f) => f.critical) ? "error" : open.length ? "warn" : "ok"},
     ];
     return <div className={"grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6"}>

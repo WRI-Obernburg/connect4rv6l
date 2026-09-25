@@ -78,7 +78,8 @@ export function interruptRV6LAction() {
 }
 
 const CONNECTION_LOST = {
-    title: "Keine Verbindung zur Robotersteuerung", severity: "warning" as const, critical: false, source: "Backend",
+    // without a connection no game is possible, so this locks the game like any other critical fault
+    title: "Keine Verbindung zur Robotersteuerung", severity: "fatal" as const, critical: true, source: "Backend",
 };
 
 export async function initRV6LClient() {

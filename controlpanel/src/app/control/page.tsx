@@ -49,8 +49,8 @@ export default function ManualControlPage() {
                 </div>
             </CardContent>
             <CardFooter>
-                <p className={"text-red-500"}>Hinweis: Es ist sinnvoll, das System vor einem manuellen Eingriff in den
-                    Error Zustand zu versetzen, um ungewollte Steuereingaben zu vermeinden</p>
+                <p className={"text-red-500"}>Hinweis: Vor einem manuellen Eingriff im Fehlerspeicher einen Fehler anlegen.
+                    Das sperrt das Spiel, bis der Fehler wieder quittiert ist.</p>
             </CardFooter>
         </Card>
         <RobotTelemetry telemetry={gameDataContext!.rv6l.telemetry} connected={gameDataContext!.rv6l.connected}

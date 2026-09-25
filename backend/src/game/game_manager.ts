@@ -1,7 +1,6 @@
 import {playerSelection, PlayerSelectionAbortError, waitForTimeout, withTimeout} from "./game_utils.ts";
-import {isGameStartBlocked, recordEvent} from "../fault_memory.ts";
-import {getRobotReadiness} from "../rv6l_telemetry.ts";
-import {moveToBlue, moveToColumn, moveToRed, putBackToBlue, putBackToRed, removeFromField} from "../rv6l_client.ts";
+import {onLockChange, recordEvent} from "../fault_memory.ts";
+import {initChipPalletizing, moveToBlue, moveToColumn, moveToRed, putBackToBlue, putBackToRed, removeFromField} from "../rv6l_client.ts";
 import {type ErrorDescription, ErrorType, logEvent} from "../errorHandler/error_handler.ts";
 import {applyGameMove, checkGameState, playAIMove, playMove, resetGame} from "./game.ts";
 import {sendState, state} from "../state.ts";
@@ -36,10 +35,9 @@ const PlayerSelect: GameState<void, number> = {
                     description: "Player selection failed, invalid column selected.",
                     date: new Date().toString()
                 });
-                GameManager.raiseError({
-                    errorType: ErrorType.FATAL,
-                    description: "Player selection failed, invalid column selected.",
-                    date: new Date().toString()
+                recordEvent("game:invalid_move", {
+                    title: "Ungültiger Spielzug", severity: "fatal", critical: true, source: "Spiel",
+                    details: "Die gewählte Spalte konnte nicht gespielt werden.",
                 });
                 return {
                     canContinue: false,
@@ -225,6 +223,10 @@ const CleanUp: GameState<boolean, void> = {
     endTime: null,
     action: async (instantRestart: boolean) => {
 
+        // PALETTE #EIN counts on for gripping and for putting back alike. Reset the pallets so the chips go back
+        // to the places they were taken from (0 .. n-1) instead of onto places that are still full.
+        await initChipPalletizing();
+
         for (let i = 0; i < 7; i++) {
             if (state.board == null) break;
             for (let row = (state.board![i] as number[]).length - 1; row >= 0; row--) {
@@ -238,7 +240,11 @@ const CleanUp: GameState<boolean, void> = {
             }
         }
 
+        // and again afterwards, so the next game starts gripping at place 0 of the refilled magazines
+        await initChipPalletizing();
+
         resetGame();
+        GameManager.isPhysicalBoardCleaned = true;
 
         if (instantRestart) {
             state.gameStartTime = Date.now();
@@ -363,6 +369,7 @@ export let GameManager: {
     handleStateTransition: (dataPromise: Promise<GameStateOutput<any>>, callingState: GameState<any, any>) => Promise<void>;
     gameEvent: EventEmitter;
     raiseError: (error: ErrorDescription) => void;
+    applyLock: (reasons: string[]) => void;
 };
 GameManager = {
     currentGameState: Idle,
@@ -386,19 +393,10 @@ GameManager = {
     },
 
     startNewGame: () => {
-        if (isGameStartBlocked()) {
+        if (GameManager.currentGameState.stateName === "ERROR") {
             logEvent({
                 errorType: ErrorType.WARNING,
-                description: "Spielstart abgelehnt: Im Fehlerspeicher stehen nicht quittierte kritische Fehler",
-                date: new Date().toString()
-            });
-            return;
-        }
-        const readiness = getRobotReadiness();
-        if (!readiness.ready) {
-            logEvent({
-                errorType: ErrorType.WARNING,
-                description: `Spielstart abgelehnt, der Roboter ist nicht bereit: ${readiness.reasons.join(", ")}`,
+                description: "Spielstart abgelehnt: Das Spiel ist gesperrt, bis keine Fehler mehr offen sind",
                 date: new Date().toString()
             });
             return;
@@ -406,6 +404,12 @@ GameManager = {
 
         if (GameManager.currentGameState.stateName === "IDLE") {
             state.gameStartTime = Date.now();
+            // a game stopped by an error may have left chips on the board, clear them before the new game
+            if (boardHasChips()) {
+                GameManager.switchState(CleanUp);
+                GameManager.handleStateTransition(CleanUp.action(true), CleanUp);
+                return;
+            }
             GameManager.switchState(PlayerSelect)
             GameManager.handleStateTransition(PlayerSelect.action(), PlayerSelect);
         } else {
@@ -437,15 +441,12 @@ GameManager = {
                 date: new Date().toString()
             };
             GameManager.raiseError(error);
+            // a critical fault locks the game in ERROR, so no further robot command is sent
             recordEvent(`game:state_error:${callingState.stateName}`, {
                 title: `Fehler im Spielablauf (${callingState.stateName})`,
                 severity: "fatal", critical: true, source: "Spiel",
                 details: String(e?.message ?? e),
             });
-            // stop the game so no further robot command is sent; the operator recovers via the control panel
-            if (callingState === GameManager.currentGameState) {
-                GameManager.switchState(Error, error);
-            }
             return;
         }
 
@@ -462,5 +463,40 @@ GameManager = {
     },
     raiseError: (error: ErrorDescription) => {
         logEvent(error);
-    }
+    },
+
+    /**
+     * The only way into and out of ERROR: locked while a critical fault is open in the fault memory or the
+     * robot is not ready, and back to IDLE on its own once nothing is open any more.
+     */
+    applyLock: (reasons: string[]) => {
+        const inError = GameManager.currentGameState.stateName === "ERROR";
+        if (reasons.length > 0) {
+            const stateData = { reasons, description: reasons.join(", ") };
+            if (!inError) {
+                logEvent({
+                    errorType: ErrorType.WARNING,
+                    description: `Spiel gesperrt: ${stateData.description}`,
+                    date: new Date().toString()
+                });
+                GameManager.switchState(Error, stateData);
+            } else if (JSON.stringify(Error.stateData) !== JSON.stringify(stateData)) {
+                Error.stateData = stateData;
+                sendState();
+            }
+        } else if (inError) {
+            logEvent({
+                errorType: ErrorType.INFO,
+                description: "Keine offenen Fehler mehr, das Spiel ist wieder freigegeben",
+                date: new Date().toString()
+            });
+            GameManager.switchState(Idle);
+        }
+    },
 };
+
+function boardHasChips() {
+    return state.board != null && Object.values(state.board as Record<string, number[]>).some((column) => column.length > 0);
+}
+
+onLockChange((reasons) => GameManager.applyLock(reasons));

@@ -62,7 +62,6 @@ export interface GameData {
         gameStartTime: number
         lastUserInteraction: number
         stateName: string
-        gameStartBlocked?: boolean
     }
     sessionState: {
         currentSessionID: string
@@ -102,7 +101,8 @@ export interface GameData {
     faultMemory?: {
         open: FaultEntry[]
         acknowledged: FaultEntry[]
-        gameStartBlocked: boolean
+        // open critical faults; while there are any, the game is locked in ERROR
+        lockReasons: string[]
     },
     qrCodeLink: string,
     errors: ErrorDescription[],

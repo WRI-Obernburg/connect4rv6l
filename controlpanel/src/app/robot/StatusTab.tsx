@@ -84,11 +84,11 @@ function buildItems(game: GameData, tasks: TaskState[] | undefined, coincidence:
 
     // Spiel
     add({id: "spiel.state", group: "spiel", icon: Workflow, label: "Spielzustand", value: game.gameState.stateName, tone: game.gameState.stateName === "ERROR" ? "error" : "neutral"});
-    const blocked = game.gameState.gameStartBlocked;
+    const reasons = game.faultMemory?.lockReasons ?? [];
     add({
-        id: "spiel.readiness", group: "spiel", icon: Play, label: "Spielstart",
-        value: blocked ? "gesperrt" : "möglich", tone: blocked ? "warn" : "ok",
-        detail: blocked ? "Roboter nicht bereit oder kritische Fehler im Fehlerspeicher" : undefined,
+        id: "spiel.readiness", group: "spiel", icon: Play, label: "Spiel",
+        value: reasons.length ? "gesperrt" : "freigegeben", tone: reasons.length ? "error" : "ok",
+        detail: reasons.length ? `Offene kritische Fehler: ${reasons.join(", ")}` : undefined,
     });
     add({
         id: "spiel.rv6l_action", group: "spiel", icon: Timer, label: "Aktion des Backends",
