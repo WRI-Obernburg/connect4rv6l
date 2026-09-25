@@ -228,11 +228,19 @@ const CleanUp: GameState<boolean, void> = {
         // to the places they were taken from (0 .. n-1) instead of onto places that are still full.
         await initChipPalletizing();
 
+        // iterate over a copy: the board shown to players and displays loses each chip as soon as the robot took it
+        const board: Record<string, number[]> | null = state.board ? JSON.parse(JSON.stringify(state.board)) : null;
         for (let i = 0; i < 7; i++) {
-            if (state.board == null) break;
-            for (let row = (state.board![i] as number[]).length - 1; row >= 0; row--) {
-                const element = (state.board![i] as number[])[row];
-                await removeFromField(i, (state.board![i] as number[]).length - row - 1);
+            if (board == null) break;
+            const column = board[i] ?? [];
+            for (let row = column.length - 1; row >= 0; row--) {
+                const element = column[row];
+                await removeFromField(i, column.length - row - 1);
+                const shown = state.board;
+                if (shown?.[i]) {
+                    state.board = {...shown, [i]: shown[i]!.slice(0, row)};
+                    sendState();
+                }
                 if (element === 1) {
                     await putBackToBlue();
                 } else if (element === 2) {

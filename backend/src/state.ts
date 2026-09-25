@@ -3,7 +3,7 @@ import {sendStateToControlPanelClient, sendStateToInternalClient} from "./intern
 
 export const state = {
     isPlayerConnected: false,
-    board: null,
+    board: null as Record<string, number[]> | null,
     difficulty: 'hard', // Default difficulty for AI
     gameStartTime: 0,
     lastUserInteraction: Date.now(),
