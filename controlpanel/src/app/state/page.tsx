@@ -159,7 +159,8 @@ const initialNodes: Node<CustomNodeProps>[] = [
 function StateGraph() {
     const gameDataContext = useContext(GameDataContext);
     const [renderingNodes, setRenderingNodes] = useState<Node<CustomNodeProps>[]>(initialNodes);
-    const [, forceUpdate] = useReducer(x => x + 1, 0);
+    // changes only on resize, so the graph is laid out again then but keeps its nodes (and open dialogs) otherwise
+    const [layoutKey, relayout] = useReducer(x => x + 1, 0);
 
 
     useEffect(() => {
@@ -190,7 +191,7 @@ function StateGraph() {
     useEffect(() => {
         //on resize window
         function recenter(){
-            forceUpdate();
+            relayout();
         }
 
         addEventListener("resize", recenter);
@@ -209,7 +210,7 @@ function StateGraph() {
 
         <div className={"h-[50vh]"}>
             <ReactFlow
-                key={new Date().getTime()}
+                key={layoutKey}
                 proOptions={{
                     hideAttribution: true,
                 }}
