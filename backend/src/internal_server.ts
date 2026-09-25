@@ -1,5 +1,7 @@
 import {GameManager, gameStates} from "./game/game_manager.ts";
 import {getTelemetry, listSymbolsForExplorer, readSymbolsForExplorer} from "./rv6l_telemetry.ts";
+import {acknowledgeAllInactive, acknowledgeFault, getFaultMemory} from "./fault_memory.ts";
+import {getCoincidence, getLogbook, getProgramSource, getSystemInfo, getTasks} from "./rv6l_monitor.ts";
 import express from 'express';
 import WebSocket from 'ws';
 import {resetGame, setBoard} from './game/game.ts';
@@ -155,6 +157,16 @@ async function handleControlCommand(data: any) {
     }
 }
 
+// Sends the result of a monitoring request, or its error, back to the page that asked
+async function replyWith(ws: WebSocket, type: string, load: () => Promise<object>, context: object = {}) {
+    try {
+        const data = await load();
+        if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({type, ...data}));
+    } catch (error) {
+        if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({type, ...context, error: String(error)}));
+    }
+}
+
 // Centralized action handlers for control panel messages
 async function handleControlPanelMessage(ws: WebSocket, data: any) {
     const actionHandlers: Record<string, (payload: any) => Promise<void>> = {
@@ -201,6 +213,39 @@ async function handleControlPanelMessage(ws: WebSocket, data: any) {
                     date: new Date().toString()
                 });
             }
+        },
+        async acknowledge_fault(payload) {
+            const result = acknowledgeFault(String(payload.key));
+            if (!result.ok) {
+                logEvent({
+                    errorType: ErrorType.WARNING,
+                    description: `Quittieren nicht möglich: ${result.reason}`,
+                    date: new Date().toString()
+                });
+            }
+        },
+        async acknowledge_all_faults() {
+            acknowledgeAllInactive();
+        },
+        // read only monitoring of the controller for the "Roboter-Monitor" page
+        async monitor_tasks() {
+            await replyWith(ws, "monitor:tasks", async () => ({tasks: await getTasks(), coincidence: await getCoincidence()}));
+        },
+        async monitor_program(payload) {
+            await replyWith(ws, "monitor:program", async () => ({
+                filename: payload.filename,
+                source: await getProgramSource(String(payload.filename), payload.refresh === true),
+            }), {filename: payload.filename});
+        },
+        async monitor_logbook(payload) {
+            const count = Number(payload.count) || 50;
+            const before = payload.before === undefined ? undefined : Number(payload.before);
+            // pages further back get their own reply type so they do not replace the live view
+            const type = payload.replyAs === "monitor:logbook_older" ? "monitor:logbook_older" : "monitor:logbook";
+            await replyWith(ws, type, async () => ({...await getLogbook(count, before), before}));
+        },
+        async monitor_system() {
+            await replyWith(ws, "monitor:system", async () => ({rows: await getSystemInfo()}));
         },
         // read only access to the controller's symbols for the variable explorer
         async list_symbols(payload) {
@@ -347,6 +392,7 @@ function sendControlPanelState(ws: WebSocket) {
                 state: RV6L_STATE.state,
                 telemetry: getTelemetry(),
             },
+            faultMemory: getFaultMemory(),
             qrCodeLink: FRONTEND_ADDRESS + "/play?sessionID=" + sessionState.currentSessionID,
             errors: errors,
             isInternalFrontendConnected: isInternalFrontendConnected,

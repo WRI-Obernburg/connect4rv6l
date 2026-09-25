@@ -1,7 +1,10 @@
-import { getSymbolList, readSymbol, readSymbols, RV6L_STATE, type SymbolListType } from "./rv6l_client.ts";
+import { getSymbolList, readControllerState, readSymbol, readSymbols, RV6L_STATE, type ControllerState, type SymbolListType } from "./rv6l_client.ts";
 import { ErrorType, logEvent } from "./errorHandler/error_handler.ts";
 import { sendStateToControlPanelClient } from "./internal_server.ts";
 import { lookupRsvError, type RsvError } from "./rsv_errors.ts";
+import { recordEvent, setRobotReadyCheck, updateCondition, updateStartLock } from "./fault_memory.ts";
+import { state } from "./state.ts";
+import { GameManager } from "./game/game_manager.ts";
 
 /**
  * Reads the state of the RV6L controller once per second for the control panel and reports
@@ -52,22 +55,32 @@ export type TelemetryValue = {
     alarmText?: string,
     okText?: string,
     severity?: Severity,
+    // overrides the static list of critical items, e.g. robot readiness is only critical during a game
+    critical?: boolean,
     position?: { x: number, y: number, z: number, axes: number[] },
 };
+
+const POLL_INTERVAL_MS = 1000;
+const MIN_AUTO_OVERRIDE = 10;
+// warn when a motor draws more than this share of its maximum current
+const CURRENT_WARNING_SHARE = 0.9;
+// the game only works with this program running in the interpreter
+const GAME_PROGRAM = (process.env.ROBOT_PROGRAM || "S:/PROG/4GEWINNT/AKTUELL/4GEWINNT.MPR").toUpperCase();
+// game states in which the robot moves; a much longer duration than expected means it is stuck
+const MOVING_STATES = ["GRAP_BLUE_CHIP", "PLACE_BLUE_CHIP", "GRAP_RED_CHIP", "PLACE_RED_CHIP", "CLEAN_UP"];
 
 const flag = (byte: number, bit: number) => ({ symbol: `_IPLC[${Math.floor(byte / 4) + 1}]`, bit: (byte % 4) * 8 + bit });
 
 const ITEMS: TelemetryItem[] = [
-    { id: "drives", group: "Steuerung", label: "Antriebe", symbol: "_SSTATUS_TEXT[1]", kind: "text", note: "RP_STATUS_DRIVE_ON = Antriebe ein" },
     { id: "user_level", group: "Steuerung", label: "Benutzerlevel", symbol: "_SSTATUS_TEXT[2]", kind: "text" },
-    { id: "selected_program", group: "Steuerung", label: "Angewähltes Programm", symbol: "_SPROGRAM[1]", kind: "text", note: "Für das Spiel muss 4GEWINNT laufen" },
-    { id: "override_auto", group: "Steuerung", label: "Override Automatik", symbol: "_IAUTO_OVER", kind: "number", unit: "%" },
+    { id: "override_auto", group: "Steuerung", label: "Override Automatik", symbol: "_IAUTO_OVER", kind: "number", unit: "%", // 0 % is reported as "Roboter kann fahren" in controllerValues()
+      alarmValues: Array.from({ length: MIN_AUTO_OVERRIDE - 1 }, (_, i) => i + 1), severity: "warning", alarmText: "Override Automatik nur {value} %" },
     { id: "override_manual", group: "Steuerung", label: "Override Hand", symbol: "_IMAN_OVER", kind: "number", unit: "%" },
     { id: "brakes", group: "Steuerung", label: "Status Bremsen", symbol: "_ISTATUS_OF_BRAKES", kind: "bits" },
     { id: "safety_controller", group: "Steuerung", label: "Safety-Controller Status", symbol: "_ISC_STATUS_INTERN", kind: "bits" },
     { id: "ups", group: "Steuerung", label: "USV-Status", symbol: "_IUPS_STATUS", kind: "bits" },
 
-    { id: "program_running", group: "Programm", label: "Roboterprogramm", ...flag(935, 6), kind: "flag", alarmWhen: 0, severity: "warning", okText: "läuft", alarmText: "Roboterprogramm läuft nicht", note: "Merker M935.6" },
+    { id: "program_running_flag", group: "Programm", label: "Interpreter aktiv (M935.6)", ...flag(935, 6), kind: "flag" },
     { id: "start_request", group: "Programm", label: "Start-Anforderung (M968.1)", ...flag(968, 1), kind: "flag" },
     { id: "stop_request", group: "Programm", label: "Stopp-Anforderung (M968.2)", ...flag(968, 2), kind: "flag" },
     // total part counters of the pallets (PALETTE_BLAU/ROT.MPR): 21 after #INIT, every PALETTE #EIN counts
@@ -104,6 +117,12 @@ const ITEMS: TelemetryItem[] = [
     ...[1, 2, 3, 4, 5, 6].map((axis): TelemetryItem => ({
         id: `current_axis_${axis}`, group: "Bewegung", label: `Motorstrom Achse ${axis}`, symbol: `_RCURR_ACT[${axis}]`, kind: "number",
     })),
+    // current limits of the drives, compared with the actual current in motorCurrentValue()
+    ...[1, 2, 3, 4, 5, 6].flatMap((axis): TelemetryItem[] => [
+        { id: `current_max_p_${axis}`, group: "Grenzwerte", label: `Max. Strom + Achse ${axis}`, symbol: `_RCURR_MAX_P[${axis}]`, kind: "number" },
+        { id: `current_max_n_${axis}`, group: "Grenzwerte", label: `Max. Strom - Achse ${axis}`, symbol: `_RCURR_MAX_N[${axis}]`, kind: "number" },
+    ]),
+    { id: "overload", group: "Störungen", label: "Überlasterkennung", symbol: "_IOVERLOAD_DETECT", kind: "number", alarmWhenNotZero: true, severity: "warning", okText: "keine Überlast", alarmText: "Überlasterkennung meldet {value}", note: "_IOVERLOAD_DETECT, Bedeutung der Werte nicht dokumentiert" },
 
     // the robot program switches the vacuum with SCHR_BIT #AUSGANG Byte 20 Bit 0, which is bit 0 of _IBIN_OUT[6]
     { id: "vacuum", group: "Ein-/Ausgänge", label: "Vakuum Sauger (Ausgang Byte 20 Bit 0)", symbol: "_IBIN_OUT[6]", bit: 0, kind: "flag" },
@@ -118,7 +137,6 @@ const ITEMS: TelemetryItem[] = [
     })),
 ];
 
-const POLL_INTERVAL_MS = 1000;
 const RETRY_UNAVAILABLE_MS = 60000;
 
 let values: TelemetryValue[] = [];
@@ -178,6 +196,7 @@ export function initTelemetry() {
 
 async function poll() {
     if (RV6L_STATE.mock || !RV6L_STATE.rv6l_connected) {
+        updateStartLock();
         if (wasConnected) {
             wasConnected = false;
             values = values.map((value) => ({ ...value, available: false, value: null, alarm: false }));
@@ -207,12 +226,128 @@ async function poll() {
         await checkAvailability([...unavailable]);
     }
 
-    values = ITEMS.map((item) => toValue(item, item.symbol in raw ? raw[item.symbol] : undefined))
-        .map((value) => withBackendChipCount(value))
-        .map((value) => withMessageText(value));
+    const controller = await readControllerState();
+    values = [
+        ...controllerValues(controller, Number(raw["_IAUTO_OVER"])),
+        ...ITEMS.filter((item) => item.group !== "Grenzwerte")
+            .map((item) => toValue(item, item.symbol in raw ? raw[item.symbol] : undefined))
+            .map((value) => withBackendChipCount(value))
+            .map((value) => withMessageText(value)),
+        motorCurrentValue(raw),
+        gameStateWatchdogValue(),
+    ];
     updatedAt = new Date().toISOString();
+    checkActionAtStartup(raw["I_Aktion"]);
     reportAlarms();
+    updateFaultMemory();
+    updateStartLock();
     sendStateToControlPanelClient?.();
+}
+
+// ---------------------------------------------------------------------------------------------
+// Robot readiness: the game needs drives on, AUTO mode, the game program running and override > 0
+
+let readiness: { ready: boolean, reasons: string[] } = { ready: false, reasons: ["Noch keine Werte von der Steuerung"] };
+
+export function getRobotReadiness() {
+    if (RV6L_STATE.mock) return { ready: true, reasons: [] };
+    if (!RV6L_STATE.rv6l_connected) return { ready: false, reasons: ["Keine Verbindung zur Robotersteuerung"] };
+    return readiness;
+}
+
+const isGameRunning = () => !["IDLE", "ERROR"].includes(state.stateName);
+
+function controllerValues(controller: ControllerState, autoOverride: number): TelemetryValue[] {
+    // not ready is a fault that stops the game while one is running, otherwise a warning that blocks the start
+    const during = isGameRunning();
+    const status = (id: string, label: string, available: boolean, ok: boolean, okText: string, alarmText: string, note?: string): TelemetryValue => ({
+        id, group: "Steuerung", label, symbol: "", kind: "text", note,
+        available, value: ok ? okText : alarmText, alarm: available && !ok, okText, alarmText,
+        severity: during ? "fatal" : "warning", critical: during,
+    });
+
+    const mode = controller.runMode ?? "";
+    // the pendant reports e.g. Test_1 or Test_3; AUTO has not been seen on this robot yet, match it loosely
+    const auto = /auto/i.test(mode);
+    const program = controller.interpreter?.filename ?? "";
+    const programName = program.split("/").pop() ?? program;
+    const rightProgram = program.toUpperCase() === GAME_PROGRAM;
+    const running = controller.interpreter?.state === "active";
+
+    const values = [
+        status("drives_state", "Antriebe", controller.drives !== null, controller.drives === "On", "ein", "Antriebe aus"),
+        status("run_mode", "Betriebsart", controller.runMode !== null, auto, mode,
+            `Betriebsart ${mode}, das Spiel braucht AUTO`, "Nur in AUTO nimmt die Steuerung Befehle vom Backend an"),
+        status("game_program", "Spielprogramm", controller.interpreter !== null, rightProgram && running,
+            `${programName} läuft`,
+            !rightProgram ? `Falsches Programm angewählt: ${programName || "keins"}` : `${programName} läuft nicht (Interpreter ${controller.interpreter?.state})`,
+            `Erwartet: ${GAME_PROGRAM}`),
+        status("override_zero", "Roboter kann fahren", !Number.isNaN(autoOverride), autoOverride > 0, "Override > 0 %",
+            "Override Automatik steht auf 0 %, der Roboter fährt nicht"),
+    ];
+    readiness = {
+        ready: values.every((v) => v.available && !v.alarm),
+        reasons: values.filter((v) => !v.available || v.alarm).map((v) => v.available ? v.alarmText! : `${v.label} unbekannt`),
+    };
+    return values;
+}
+
+setRobotReadyCheck(() => getRobotReadiness().ready);
+
+// ---------------------------------------------------------------------------------------------
+// Motor currents close to the drive limits
+
+function motorCurrentValue(raw: Record<string, string>): TelemetryValue {
+    const high: string[] = [];
+    let available = false;
+    for (let axis = 1; axis <= 6; axis++) {
+        const current = Number(raw[`_RCURR_ACT[${axis}]`]);
+        const limit = Math.min(Math.abs(Number(raw[`_RCURR_MAX_P[${axis}]`])), Math.abs(Number(raw[`_RCURR_MAX_N[${axis}]`])));
+        if (Number.isNaN(current) || !limit) continue;
+        available = true;
+        const share = Math.abs(current) / limit;
+        if (share > CURRENT_WARNING_SHARE) high.push(`Achse ${axis} bei ${Math.round(share * 100)} %`);
+    }
+    const alarmText = `Motorstrom nahe am Maximum: ${high.join(", ")}`;
+    return {
+        id: "motor_current", group: "Störungen", label: "Motorströme", symbol: "_RCURR_ACT", kind: "text",
+        available, value: high.length ? alarmText : "im normalen Bereich", alarm: high.length > 0,
+        okText: "im normalen Bereich", alarmText, severity: "warning",
+        note: `Warnung ab ${CURRENT_WARNING_SHARE * 100} % von _RCURR_MAX_P/N`,
+    };
+}
+
+// ---------------------------------------------------------------------------------------------
+// A robot state that takes much longer than expected means the robot or the game is stuck
+
+function gameStateWatchdogValue(): TelemetryValue {
+    const current = GameManager.currentGameState;
+    const elapsed = current.startTime ? Date.now() - new Date(current.startTime).getTime() : 0;
+    const limit = (current.expectedDuration ?? Infinity) * 1.5;
+    const overdue = MOVING_STATES.includes(current.stateName) && elapsed > limit;
+    const alarmText = `${current.stateName} dauert ungewöhnlich lange (${Math.round(elapsed / 1000)} s)`;
+    return {
+        id: "state_watchdog", group: "Störungen", label: "Spielablauf", symbol: "", kind: "text",
+        available: true, value: overdue ? alarmText : "im Zeitplan", alarm: overdue,
+        okText: "im Zeitplan", alarmText, severity: "warning",
+    };
+}
+
+// ---------------------------------------------------------------------------------------------
+// After a restart of the backend the robot may still be in the middle of an action
+
+let startupChecked = false;
+
+function checkActionAtStartup(action: string | undefined) {
+    if (startupChecked || action === undefined) return;
+    startupChecked = true;
+    if (String(action) !== "0") {
+        recordEvent("rv6l:action_at_startup", {
+            title: `Beim Start des Backends war am Roboter noch Aktion ${action} aktiv`,
+            severity: "fatal", critical: true, source: "Robotersteuerung",
+            details: "Das Backend wurde vermutlich während einer Bewegung neu gestartet. Stellung, Sauger und Spielfeld prüfen.",
+        });
+    }
 }
 
 async function checkAvailability(symbols: string[]) {
@@ -308,6 +443,46 @@ function reportAlarms() {
             date: new Date().toString()
         });
     }
+}
+
+// These faults block new games until they are acknowledged in the fault memory
+const CRITICAL_ITEMS = new Set([
+    "collective_fault", "compressed_air", "safety_controller_error", "collision",
+    "collision_axis_1", "collision_axis_2", "collision_axis_3", "collision_axis_4", "collision_axis_5", "collision_axis_6",
+    "pallet_blue", "pallet_red",
+]);
+let storedMessageKeys = new Set<string>();
+
+function updateFaultMemory() {
+    for (const value of values) {
+        // messages of the controller are stored per message number below
+        if (!value.severity || !value.available || value.group === "Meldung") continue;
+        updateCondition(`telemetry:${value.id}`, value.alarm, {
+            title: value.alarmText ?? value.label,
+            severity: value.severity,
+            critical: value.critical ?? CRITICAL_ITEMS.has(value.id),
+            source: "Robotersteuerung",
+            details: value.note,
+        });
+    }
+
+    const current = new Set<string>();
+    for (const message of getMessages()) {
+        const key = `message:S${message.number}`;
+        current.add(key);
+        updateCondition(key, true, {
+            title: `S${message.number}${message.reference ? `: ${message.reference.message}` : ""}`,
+            severity: message.level === "Error" ? "fatal" : "warning",
+            // errors shown on the pendant stop the robot; information like S84 does not
+            critical: message.level === "Error",
+            source: "Meldung der Steuerung",
+            details: message.reference ? `Ursache: ${message.reference.cause} Abhilfe: ${message.reference.remedy}` : undefined,
+        });
+    }
+    for (const key of storedMessageKeys) {
+        if (!current.has(key)) updateCondition(key, false, { title: key, severity: "warning", critical: false, source: "Meldung der Steuerung" });
+    }
+    storedMessageKeys = current;
 }
 
 // Read only helpers for the variable explorer in the control panel

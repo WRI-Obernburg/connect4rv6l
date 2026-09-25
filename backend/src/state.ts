@@ -8,6 +8,8 @@ export const state = {
     gameStartTime: 0,
     lastUserInteraction: Date.now(),
     stateName: "IDLE",
+    // unacknowledged critical faults in the fault memory block new games
+    gameStartBlocked: false,
 }
 
 export function resetGameState() {

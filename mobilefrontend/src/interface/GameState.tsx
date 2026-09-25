@@ -3,4 +3,5 @@ export interface GameState {
     board: Dict<number[]> | null;
     difficulty: 'easy' | 'medium' | 'hard'; // Difficulty level for AI
     stateName: string; // Current state name
+    gameStartBlocked?: boolean; // unacknowledged critical faults in the fault memory
 }

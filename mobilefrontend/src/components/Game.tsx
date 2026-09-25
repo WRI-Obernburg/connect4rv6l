@@ -98,6 +98,10 @@ export default function Game(props: { sessionID: string, indoor: boolean }) {
         return <Panel title="Der Roboter schläft" text="Morgen ist er wieder bereit für eine Partie." />
     }
 
+    if (gameState.stateName === "IDLE" && gameState.gameStartBlocked) {
+        return <Panel title="Der Roboter wird gerade geprüft" text="Ein Betreuer muss erst eine Störung bestätigen. Danach kannst du eine Partie starten." />
+    }
+
     if (gameState.stateName === "IDLE") {
         return <Panel title="Bereit für eine Partie?" text="Du spielst Blau, der Roboter spielt Rot. Vier in einer Reihe gewinnen.">
             <StartGame gameState={gameState.stateName} onGameStart={() => {

@@ -1,5 +1,5 @@
 "use client";
-import {Calendar, Home, Inbox, MonitorCog, Monitor, Orbit, Search, Settings, ShieldAlert, SquareChartGantt, Gamepad, Package, Info} from "lucide-react"
+import {Calendar, Home, Inbox, MonitorCog, Monitor, Orbit, Search, Settings, ShieldAlert, SquareChartGantt, Gamepad, Package, Info, TriangleAlert, Activity} from "lucide-react"
 
 import {
     Sidebar,
@@ -29,6 +29,16 @@ const items = [
         title: "State",
         url: "/state",
         icon: Orbit,
+    },
+    {
+        title: "Roboter-Monitor",
+        url: "/robot",
+        icon: Activity,
+    },
+    {
+        title: "Fehlerspeicher",
+        url: "/fault-memory",
+        icon: TriangleAlert,
     },
     {
         title: "Error Log",

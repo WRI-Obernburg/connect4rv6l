@@ -3,6 +3,7 @@ import { XMLParser } from 'fast-xml-parser';
 import { sendStateToControlPanelClient } from "./internal_server.ts";
 import { ErrorType, logEvent } from "./errorHandler/error_handler.ts";
 import EventEmitter from "events";
+import { recordEvent, updateCondition } from "./fault_memory.ts";
 
 var client = new net.Socket();
 const parser = new XMLParser();
@@ -18,6 +19,8 @@ let receiveBuffer = '';
 type PendingCommand = {
     body: string,
     timeoutMs: number,
+    // resolve with the raw XML instead of the parsed object, e.g. to keep attributes
+    raw?: boolean,
     resolve: (response: any) => void,
     reject: (error: Error) => void,
     timer?: ReturnType<typeof setTimeout>
@@ -74,6 +77,10 @@ export function interruptRV6LAction() {
     abortSignal.emit('abort');
 }
 
+const CONNECTION_LOST = {
+    title: "Keine Verbindung zur Robotersteuerung", severity: "warning" as const, critical: false, source: "Backend",
+};
+
 export async function initRV6LClient() {
     if (RV6L_STATE.mock) {
         logEvent({
@@ -98,6 +105,7 @@ export async function initRV6LClient() {
             })
 
             RV6L_STATE.rv6l_connected = true;
+            updateCondition("rv6l:connection", false, CONNECTION_LOST);
             sendStateToControlPanelClient?.();
 
             const startSessionCommand = 'SYMTABLE_SESSION / \n';
@@ -130,6 +138,14 @@ export async function initRV6LClient() {
         client.on('close', async function () {
 
             RV6L_STATE.rv6l_connected = false;
+            updateCondition("rv6l:connection", true, CONNECTION_LOST);
+            if (RV6L_STATE.rv6l_moving) {
+                recordEvent("rv6l:connection_lost_while_moving", {
+                    title: `Verbindung zum RV6L während "${RV6L_STATE.state}" verloren`,
+                    severity: "fatal", critical: true, source: "Backend",
+                    details: "Der Roboter hat die Bewegung eventuell nicht beendet. Stellung und Spielfeld prüfen.",
+                });
+            }
             failAllCommands(new Error("RV6L connection closed"));
             logEvent({
                 errorType: ErrorType.WARNING,
@@ -209,6 +225,15 @@ async function runAction(actionName: string, robotSteps: () => Promise<void>) {
             description: `Couldn't complete ${actionName}: ${error}`,
             date: new Date().toString()
         });
+        // an abort from the control panel is intended, everything else leaves the robot in an unknown state
+        const aborted = abortGeneration !== activeActionGeneration;
+        recordEvent(`rv6l:action_failed:${actionName}`, {
+            title: aborted ? `Roboteraktion ${actionName} abgebrochen` : `Roboteraktion ${actionName} fehlgeschlagen`,
+            severity: aborted ? "warning" : "fatal",
+            critical: !aborted,
+            source: "Backend",
+            details: String(error),
+        });
         throw error;
     } finally {
         // release the lock; if the robot is still moving, ensureRobotReady blocks the next command
@@ -234,6 +259,7 @@ export async function moveToBlue() {
     await runAction("MoveToBlue", async () => {
         await writeVariableInProc("I_Aktion", "11");
         await movementDone();
+        await expectVacuum(true, "dem Greifen des blauen Chips");
     });
     RV6L_STATE.blueChipsLeft--;
 }
@@ -242,6 +268,7 @@ export async function moveToRed() {
     await runAction("MoveToRed", async () => {
         await writeVariableInProc("I_Aktion", "21");
         await movementDone();
+        await expectVacuum(true, "dem Greifen des roten Chips");
     });
     RV6L_STATE.redChipsLeft--;
 }
@@ -255,6 +282,7 @@ export async function moveToColumn(column: number) {
         await writeVariableInProc("IX_Schacht", column.toString());
         await writeVariableInProc("I_Aktion", "31");
         await movementDone();
+        await expectVacuum(false, "dem Einwerfen in Spalte " + column);
     });
 }
 
@@ -286,6 +314,7 @@ export async function removeFromField(x: number, y:number) {
         await writeVariableInProc("IZ_Feld", y.toString());
         await writeVariableInProc("I_Aktion", "41");
         await movementDone();
+        await expectVacuum(true, "der Entnahme aus dem Spielfeld");
     });
 }
 
@@ -293,6 +322,7 @@ export async function putBackToBlue() {
     await runAction("PutBackToBlue", async () => {
         await writeVariableInProc("I_Aktion", "12");
         await movementDone();
+        await expectVacuum(false, "dem Ablegen im blauen Magazin");
     });
     RV6L_STATE.blueChipsLeft++;
 }
@@ -301,8 +331,19 @@ export async function putBackToRed() {
     await runAction("PutBackToRed", async () => {
         await writeVariableInProc("I_Aktion", "22");
         await movementDone();
+        await expectVacuum(false, "dem Ablegen im roten Magazin");
     });
     RV6L_STATE.redChipsLeft++;
+}
+
+// The robot program switches the suction cup with output byte 20 bit 0 (bit 0 of _IBIN_OUT[6]).
+// There is no vacuum sensor, but a wrong output state after a movement means the program did not do
+// what was expected, so the chip is probably not where the game thinks it is.
+async function expectVacuum(on: boolean, after: string) {
+    const output = Number(await readVariableInProc("_IBIN_OUT[6]"));
+    if (((output & 1) === 1) !== on) {
+        throw new Error(`Sauger ist nach ${after} ${on ? "nicht eingeschaltet" : "noch eingeschaltet"} (Ausgang Byte 20 Bit 0)`);
+    }
 }
 
 async function movementDone() {
@@ -375,11 +416,26 @@ function escapeXml(value: string): string {
         .replace(/'/g, '&apos;');
 }
 
-function sendCommand(body: string, timeoutMs = 5000): Promise<any> {
+function sendCommand(body: string, timeoutMs = 5000, raw = false): Promise<any> {
     return new Promise((resolve, reject) => {
-        commandQueue.push({ body, timeoutMs, resolve, reject });
+        commandQueue.push({ body, timeoutMs, raw, resolve, reject });
         sendNextCommand();
     });
+}
+
+// Commands the monitoring in the control panel may send; all of them only read
+const MONITOR_COMMANDS = [
+    "<phgApi><getTaskState>", "<phgApi><getRobotName>", "<phgApi><getCoincidenceState",
+    "<lgbApi><getLogbookSize>", "<lgbApi><getLogbookEntries>",
+    "<awpApi><getProg>", "<awpApi><getVersionInformation>", "<projectApi><getActiveProjectName",
+];
+
+/** Read only access for the monitoring; returns the raw XML of the response. */
+export async function sendMonitorCommand(body: string, timeoutMs = 30000): Promise<string> {
+    if (!MONITOR_COMMANDS.some((prefix) => body.startsWith(prefix))) {
+        throw new Error(`Command not allowed for monitoring: ${body.slice(0, 60)}`);
+    }
+    return sendCommand(body, timeoutMs, true);
 }
 
 function sendNextCommand() {
@@ -415,10 +471,10 @@ function handleResponse(message: string) {
     try {
         const response = parser.parse(message);
         if (response?.RSVRES?.error !== undefined) {
-            const details = [response.RSVRES.error].flat().join(" ");
+            const details = [response.RSVRES.error].flat().map((e) => typeof e === "object" ? JSON.stringify(e) : e).join(" ");
             command.reject(new Error(`RV6L error: ${details}`));
         } else {
-            command.resolve(response);
+            command.resolve(command.raw ? message : response);
         }
     } catch (e) {
         command.reject(new Error(`Could not parse RV6L response: ${message}`));
@@ -461,6 +517,31 @@ export async function readSymbols(names: string[]): Promise<Record<string, strin
 export async function readSymbol(name: string, machineData = false): Promise<string> {
     const result = await sendCommand(`<symbolApi><readSymbolValue><name>${escapeXml(name)}</name>${machineData ? "<machineData/>" : ""}</readSymbolValue></symbolApi>`);
     return String(result.RSVRES.symbolApi.readSymbolValue.value ?? "").trim();
+}
+
+export type ControllerState = {
+    runMode: string | null,
+    drives: string | null,
+    interpreter: { state: string, filename: string, step: string } | null,
+};
+
+// Operating mode, drives and interpreter are not symbols but pendant queries (phgApi, read only)
+export async function readControllerState(): Promise<ControllerState> {
+    const query = async (body: string, command: string) => {
+        try {
+            return (await sendCommand(`<phgApi>${body}</phgApi>`)).RSVRES.phgApi[command];
+        } catch {
+            return null;
+        }
+    };
+    const runMode = await query("<getRunMode/>", "getRunMode");
+    const drives = await query("<getDrives/>", "getDrives");
+    const task = await query("<getTaskState><task>Interpreter</task></getTaskState>", "getTaskState");
+    return {
+        runMode: runMode ? String(runMode.state) : null,
+        drives: drives ? String(drives.state) : null,
+        interpreter: task ? { state: String(task.state), filename: String(task.filename ?? ""), step: String(task.step ?? "") } : null,
+    };
 }
 
 export type SymbolListType = "sysVar" | "var" | "input" | "output" | "marker" | "machineData";

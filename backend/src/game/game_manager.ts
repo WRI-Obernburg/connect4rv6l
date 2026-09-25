@@ -1,4 +1,6 @@
 import {playerSelection, PlayerSelectionAbortError, waitForTimeout, withTimeout} from "./game_utils.ts";
+import {isGameStartBlocked, recordEvent} from "../fault_memory.ts";
+import {getRobotReadiness} from "../rv6l_telemetry.ts";
 import {moveToBlue, moveToColumn, moveToRed, putBackToBlue, putBackToRed, removeFromField} from "../rv6l_client.ts";
 import {type ErrorDescription, ErrorType, logEvent} from "../errorHandler/error_handler.ts";
 import {applyGameMove, checkGameState, playAIMove, playMove, resetGame} from "./game.ts";
@@ -384,6 +386,23 @@ GameManager = {
     },
 
     startNewGame: () => {
+        if (isGameStartBlocked()) {
+            logEvent({
+                errorType: ErrorType.WARNING,
+                description: "Spielstart abgelehnt: Im Fehlerspeicher stehen nicht quittierte kritische Fehler",
+                date: new Date().toString()
+            });
+            return;
+        }
+        const readiness = getRobotReadiness();
+        if (!readiness.ready) {
+            logEvent({
+                errorType: ErrorType.WARNING,
+                description: `Spielstart abgelehnt, der Roboter ist nicht bereit: ${readiness.reasons.join(", ")}`,
+                date: new Date().toString()
+            });
+            return;
+        }
 
         if (GameManager.currentGameState.stateName === "IDLE") {
             state.gameStartTime = Date.now();
@@ -418,6 +437,11 @@ GameManager = {
                 date: new Date().toString()
             };
             GameManager.raiseError(error);
+            recordEvent(`game:state_error:${callingState.stateName}`, {
+                title: `Fehler im Spielablauf (${callingState.stateName})`,
+                severity: "fatal", critical: true, source: "Spiel",
+                details: String(e?.message ?? e),
+            });
             // stop the game so no further robot command is sent; the operator recovers via the control panel
             if (callingState === GameManager.currentGameState) {
                 GameManager.switchState(Error, error);

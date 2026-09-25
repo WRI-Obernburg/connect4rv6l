@@ -40,6 +40,20 @@ export interface ControllerMessage {
     reference: { code: string, message: string, cause: string, remedy: string } | null
 }
 
+export interface FaultEntry {
+    key: string
+    title: string
+    severity: "fatal" | "warning"
+    critical: boolean
+    source: string
+    details?: string
+    active: boolean
+    firstSeen: string
+    lastSeen: string
+    occurrences: number
+    acknowledgedAt?: string
+}
+
 export interface GameData {
     gameState: {
         isPlayerConnected: boolean
@@ -48,6 +62,7 @@ export interface GameData {
         gameStartTime: number
         lastUserInteraction: number
         stateName: string
+        gameStartBlocked?: boolean
     }
     sessionState: {
         currentSessionID: string
@@ -83,6 +98,11 @@ export interface GameData {
             values: TelemetryValue[]
             messages?: ControllerMessage[]
         }
+    },
+    faultMemory?: {
+        open: FaultEntry[]
+        acknowledged: FaultEntry[]
+        gameStartBlocked: boolean
     },
     qrCodeLink: string,
     errors: ErrorDescription[],
