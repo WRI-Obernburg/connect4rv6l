@@ -1,4 +1,6 @@
-FROM oven/bun:latest AS base
+# The frontends compile to static files that are the same on every architecture,
+# so build them natively on the CI runner instead of under QEMU emulation.
+FROM --platform=$BUILDPLATFORM oven/bun:latest AS base
 LABEL authors="timarnold"
 COPY . /build
 RUN mkdir /app /app/controlpanel /app/localfrontend
