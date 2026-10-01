@@ -263,6 +263,7 @@ export async function moveToBlue() {
         await writeVariableInProc("I_Aktion", "11");
         await movementDone();
         await expectVacuum(true, "dem Greifen des blauen Chips");
+        await checkVacuumSwitch(true, "dem Greifen des blauen Chips");
         await expectPalletStep("blue", before, "Greifen");
     });
 }
@@ -274,6 +275,7 @@ export async function moveToRed() {
         await writeVariableInProc("I_Aktion", "21");
         await movementDone();
         await expectVacuum(true, "dem Greifen des roten Chips");
+        await checkVacuumSwitch(true, "dem Greifen des roten Chips");
         await expectPalletStep("red", before, "Greifen");
     });
 }
@@ -288,6 +290,7 @@ export async function moveToColumn(column: number) {
         await writeVariableInProc("I_Aktion", "31");
         await movementDone();
         await expectVacuum(false, "dem Einwerfen in Spalte " + column);
+        await checkVacuumSwitch(false, "dem Einwerfen in Spalte " + (column + 1));
     });
 }
 
@@ -320,6 +323,7 @@ export async function removeFromField(x: number, y:number) {
         await writeVariableInProc("I_Aktion", "41");
         await movementDone();
         await expectVacuum(true, "der Entnahme aus dem Spielfeld");
+        await checkVacuumSwitch(true, "der Entnahme aus dem Spielfeld");
     });
 }
 
@@ -329,6 +333,7 @@ export async function putBackToBlue() {
         await writeVariableInProc("I_Aktion", "12");
         await movementDone();
         await expectVacuum(false, "dem Ablegen im blauen Magazin");
+        await checkVacuumSwitch(false, "dem Ablegen im blauen Magazin");
         await expectPalletStep("blue", before, "Ablegen");
     });
 }
@@ -339,6 +344,7 @@ export async function putBackToRed() {
         await writeVariableInProc("I_Aktion", "22");
         await movementDone();
         await expectVacuum(false, "dem Ablegen im roten Magazin");
+        await checkVacuumSwitch(false, "dem Ablegen im roten Magazin");
         await expectPalletStep("red", before, "Ablegen");
     });
 }
@@ -376,6 +382,19 @@ async function expectVacuum(on: boolean, after: string) {
     if (((output & 1) === 1) !== on) {
         throw new Error(`Sauger ist nach ${after} ${on ? "nicht eingeschaltet" : "noch eingeschaltet"} (Ausgang Byte 20 Bit 0)`);
     }
+}
+
+// The vacuum switch (input byte 20 bit 0) tells whether a chip really hangs on the suction cup. For now a mismatch
+// is only stored as a warning, until it is confirmed in operation that the input is the switch and 1 means vacuum;
+// then it should fail the action like expectVacuum.
+async function checkVacuumSwitch(expected: boolean, after: string) {
+    const vacuum = (Number(await readVariableInProc("_IBIN_IN[6]")) & 1) === 1;
+    if (vacuum === expected) return;
+    recordEvent(expected ? "rv6l:vacuum_missing" : "rv6l:vacuum_left", {
+        title: expected ? "Vakuumschalter meldet kein Vakuum nach dem Greifen" : "Vakuumschalter meldet noch Vakuum nach dem Ablegen",
+        severity: "warning", critical: false, source: "Backend",
+        details: `Nach ${after}: ${expected ? "es hängt vermutlich kein Chip am Sauger" : "der Chip hängt vermutlich noch am Sauger"} (Eingang Byte 20 Bit 0 ist ${vacuum ? 1 : 0}).`,
+    });
 }
 
 async function movementDone() {

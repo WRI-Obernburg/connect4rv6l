@@ -1,4 +1,5 @@
 import { sendState, state } from "./state.ts";
+import { getTelemetry } from "./rv6l_telemetry.ts";
 import { moveToBlue, moveToColumn, moveToRed, putBackToBlue, putBackToRed, RV6L_STATE } from "./rv6l_client.ts";
 import { GameManager, getPendingStop } from "./game/game_manager.ts";
 import { adminQueue, moveInQueue, removeFromQueue, renewOffer } from "./players.ts";
@@ -84,6 +85,7 @@ function renderHand(): Panel {
     const lines = [
         "🦾 <b>Manuelle Steuerung</b>",
         `Greifer: ${held ? `hält ${COLOR[held.color]} (${escape(held.by)})` : "leer"}`,
+        vacuumLine(),
         busy ? `⏳ ${escape(busy)} …` : null,
         lastResult || null,
         blocker ? `\n⚠️ ${blocker}` : null,
@@ -101,6 +103,13 @@ function renderHand(): Panel {
     }
     buttons.push(refreshRow("hand"));
     return { text: lines.filter((line) => line != null).join("\n"), buttons };
+}
+
+// what the vacuum switch says right now, from the telemetry (read every second)
+function vacuumLine() {
+    const value = getTelemetry().values.find((v) => v.id === "vacuum_switch");
+    if (!value?.available) return null;
+    return value.value === 1 ? "Vakuumschalter: 🟢 Vakuum, ein Chip hängt" : "Vakuumschalter: ⚪ kein Vakuum";
 }
 
 function handAction(action: string, args: string[], name: string, refresh: () => Promise<void>): string {

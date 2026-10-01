@@ -121,6 +121,10 @@ const ITEMS: TelemetryItem[] = [
 
     // the robot program switches the vacuum with SCHR_BIT #AUSGANG Byte 20 Bit 0, which is bit 0 of _IBIN_OUT[6]
     { id: "vacuum", group: "Ein-/Ausgänge", label: "Vakuum Sauger (Ausgang Byte 20 Bit 0)", symbol: "_IBIN_OUT[6]", bit: 0, kind: "flag" },
+    // the vacuum switch of the gripper; 1 means a chip is held (assumed from the wiring, to be confirmed in operation)
+    { id: "vacuum_switch", group: "Ein-/Ausgänge", label: "Vakuumschalter (Eingang Byte 20 Bit 0)", symbol: "_IBIN_IN[6]", bit: 0, kind: "flag",
+        note: "1 = Vakuum, ein Chip hängt am Sauger" },
+    { id: "inputs_6", group: "Ein-/Ausgänge", label: "Eingänge (_IBIN_IN[6], Byte 20 bis 23)", symbol: "_IBIN_IN[6]", kind: "bits" },
     { id: "outputs_6", group: "Ein-/Ausgänge", label: "Ausgänge (_IBIN_OUT[6], Byte 20 bis 23)", symbol: "_IBIN_OUT[6]", kind: "bits" },
     { id: "inputs_1", group: "Ein-/Ausgänge", label: "Eingänge (_IBIN_IN[1])", symbol: "_IBIN_IN[1]", kind: "bits" },
     { id: "inputs_2", group: "Ein-/Ausgänge", label: "Eingänge (_IBIN_IN[2])", symbol: "_IBIN_IN[2]", kind: "bits" },
