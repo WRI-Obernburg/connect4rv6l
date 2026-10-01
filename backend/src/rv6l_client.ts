@@ -82,6 +82,9 @@ const CONNECTION_LOST = {
     title: "Keine Verbindung zur Robotersteuerung", severity: "fatal" as const, critical: true, source: "Backend",
 };
 
+// set after a connection loss until the next successful connect
+let reconnecting = false;
+
 // The connection is kept up in mock mode as well: mocked actions send no commands, and after switching the mock
 // off the robot is available again right away (returning here would also end the reconnect loop for good)
 export async function initRV6LClient() {
@@ -93,6 +96,7 @@ export async function initRV6LClient() {
         const ROBOT_PORT = parseInt(process.env.ROBOT_PORT || '80');
         client.connect(ROBOT_PORT, ROBOT_HOST, async function () {
 
+            reconnecting = false;
             logEvent({
                 errorType: ErrorType.INFO,
                 description: "Connected to RV6L",
@@ -142,20 +146,19 @@ export async function initRV6LClient() {
                 });
             }
             failAllCommands(new Error("RV6L connection closed"));
-            logEvent({
-                errorType: ErrorType.WARNING,
-                description: "RV6L connection closed unexpectedly. Reconnecting...",
-                date: new Date().toString()
-            })
+            // while the controller is switched off every attempt fails; report the outage once, not every few seconds
+            if (!reconnecting) {
+                reconnecting = true;
+                logEvent({
+                    errorType: ErrorType.WARNING,
+                    description: "RV6L connection closed unexpectedly. Reconnecting...",
+                    date: new Date().toString()
+                })
+            }
             client.destroy(); // Destroy the current client connection
             client.removeAllListeners(); // Remove all listeners to avoid duplicate events
             sendStateToControlPanelClient?.();
             await new Promise(resolve => setTimeout(resolve, 5000));
-            logEvent({
-                errorType: ErrorType.INFO,
-                description: "Reconnecting to RV6L...",
-                date: new Date().toString()
-            })
 
             RV6L_STATE.globalMessageCounter = 0; // Reset the message counter
             initRV6LClient(); // Reinitialize the RV6L client

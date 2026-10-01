@@ -66,8 +66,9 @@ const CURRENT_WARNING_SHARE = 0.9;
 // the game only works with this program running in the interpreter
 const GAME_PROGRAM = (process.env.ROBOT_PROGRAM || "S:/PROG/4GEWINNT/AKTUELL/4GEWINNT.MPR").toUpperCase();
 // Subprograms called by the game program (U_PROG in robot-program/4GEWINNT/4GEWINNT.MPR). The interpreter
-// reports the file it is executing, so while one of these runs it shows e.g. CHIP_IN_SCHACHT.SPR
-const GAME_SUBPROGRAMS = ["BLAU_GREIFEN", "ROT_GREIFEN", "FELDENTNAHME", "CHIP_IN_SCHACHT", "BLAU_ABLEGEN", "ROT_ABLEGEN"];
+// reports the file it is executing, so while one of these runs it shows e.g. CHIP_IN_SCHACHT.SPR.
+// AKTION evaluates the commands from the PC in newer versions of the game program
+const GAME_SUBPROGRAMS = ["AKTION", "BLAU_GREIFEN", "ROT_GREIFEN", "FELDENTNAHME", "CHIP_IN_SCHACHT", "BLAU_ABLEGEN", "ROT_ABLEGEN"];
 // game states in which the robot moves; a much longer duration than expected means it is stuck
 const MOVING_STATES = ["GRAP_BLUE_CHIP", "PLACE_BLUE_CHIP", "GRAP_RED_CHIP", "PLACE_RED_CHIP", "CLEAN_UP"];
 

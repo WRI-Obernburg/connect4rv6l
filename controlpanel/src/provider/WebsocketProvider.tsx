@@ -58,8 +58,6 @@ export default function WebsocketProvider({
                 } else {
                   handlers.current.forEach((handler) => handler(data));
                 }
-
-                console.log('Received message:', data);
             } catch (error) {
                 console.error('Error parsing message:', error);
             }

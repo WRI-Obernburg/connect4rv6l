@@ -48,8 +48,13 @@ export let sendStateToInternalClient: (() => void) = () => {
         sendInternalState(connection.ws);
     });
 };
+// a control panel that cannot keep up (slow WLAN, tab in the background) skips updates instead of
+// queueing them in the backend's memory; it gets the current state again once its buffer has drained
+const MAX_BUFFERED_BYTES = 1024 * 1024;
+
 export let sendStateToControlPanelClient: (() => void) = () => {
     controlPanelConnections.forEach((connection) => {
+        if (connection.bufferedAmount > MAX_BUFFERED_BYTES) return;
         sendControlPanelState(connection);
     });
 };
