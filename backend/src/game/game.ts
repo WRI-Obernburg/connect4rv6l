@@ -1,7 +1,7 @@
 import * as c4 from "connect4-ai";
 import {resetGameState, state} from "../state.ts";
 import {ErrorType, logEvent} from "../errorHandler/error_handler.ts";
-import {getTargetPlays, getTop3ScoreTiers, getRandomEle} from "connect4-ai/lib/helperFunctions.js";
+import {getTargetPlays, getRandomEle} from "connect4-ai/lib/helperFunctions.js";
 import difficultyRatios from "connect4-ai/lib/difficultyRatiosForAI.js";
 import {type AIDecision, recordMove} from "./game_analysis.ts";
 
@@ -44,11 +44,13 @@ export function playMove(column: number):boolean {
  * The same as game.playAI of connect4-ai, step by step, so the control panel can show how the move was chosen:
  * negamax scores per column, the three best score tiers, a random draw that picks the tier by the difficulty,
  * and a random column among those with that tier's score.
+ * The tiers are built here: getTop3ScoreTiers of the library keeps the three lowest distinct scores instead of the
+ * three highest as soon as there are more than three, so even "hard" missed winning moves.
  */
 export function playAIMove(): number {
     const started = Date.now();
     const scores: (number | null)[] = game.negamaxScores();
-    const tiers = getTop3ScoreTiers(scores) as [number, number, number];
+    const tiers = topThreeTiers(scores);
     const ratios = difficultyRatios[state.difficulty.toLowerCase()] ?? difficultyRatios.hard!;
     // like getTargetScore of the library, but keeping the random number and the tier it picked
     const draw = Math.random();
@@ -69,6 +71,16 @@ export function playAIMove(): number {
     });
 
     return moveByAI;
+}
+
+/**
+ * Best, second best and third best distinct score. With only two distinct scores tiers 1 and 2 get the best and
+ * tier 3 the second best, with one all three get it, as the library describes it.
+ */
+export function topThreeTiers(scores: (number | null)[]): [number, number, number] {
+    const distinct = [...new Set(scores.filter((score): score is number => score != null))].sort((a, b) => b - a);
+    const [best = 0, second = best, third] = distinct;
+    return third === undefined ? [best, best, second] : [best, second, third];
 }
 
 export function applyGameMove() {

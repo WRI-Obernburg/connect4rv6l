@@ -82,8 +82,7 @@ function MoveList(props: { moves: AnalysisMove[], selected: number | null, onSel
 
 function Decision({move, decision}: { move: AnalysisMove, decision: AIDecision }) {
     const unique = [...new Set(decision.scores.filter((s): s is number => s != null))].sort((a, b) => b - a);
-    // getTop3ScoreTiers of the library keeps the three lowest of the distinct scores, not the three highest,
-    // as soon as there are more than three: then the best moves are never in tier 1
+    // tier 1 must hold the best score; the library's getTop3ScoreTiers broke that (fixed in the backend on 2026-10-01)
     const bestSkipped = unique.length > 0 && unique[0]! > decision.tiers[0];
     const chosenScore = decision.scores[move.column];
 
@@ -109,8 +108,8 @@ function Decision({move, decision}: { move: AnalysisMove, decision: AIDecision }
                 </div>
                 <p className={"mt-1 text-xs text-gray-500"}>Verschiedene Werte, absteigend: {unique.map(signed).join(", ") || "–"}</p>
                 {bestSkipped && <p className={"mt-2 rounded-md border border-yellow-300 bg-yellow-50 p-2 text-sm text-yellow-900"}>
-                    Der beste Wert {signed(unique[0]!)} ist in keiner Stufe: Bei mehr als drei verschiedenen Werten übernimmt die
-                    KI-Bibliothek (getTop3ScoreTiers) die drei niedrigsten statt der drei höchsten.
+                    Der beste Wert {signed(unique[0]!)} ist nicht in Stufe 1. Das darf nicht vorkommen; die Stufenbildung im Backend
+                    (topThreeTiers in game.ts) prüfen.
                 </p>}
             </div>
             <div>
