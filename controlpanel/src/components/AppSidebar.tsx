@@ -27,47 +27,47 @@ const items = [
     },
     {
         title: "State",
-        url: "/state",
+        url: "/state/",
         icon: Orbit,
     },
     {
         title: "Roboter-Monitor",
-        url: "/robot",
+        url: "/robot/",
         icon: Activity,
     },
     {
         title: "Fehlerspeicher",
-        url: "/fault-memory",
+        url: "/fault-memory/",
         icon: TriangleAlert,
     },
     {
         title: "Error Log",
-        url: "/error-log",
+        url: "/error-log/",
         icon: ShieldAlert,
     },
     {
         title: "Manual Control",
-        url: "/control",
+        url: "/control/",
         icon: MonitorCog,
     },
     {
         title: "Game",
-        url: "/game",
+        url: "/game/",
         icon: Gamepad,
     },
     {
         title: "Testbetrieb",
-        url: "/test",
+        url: "/test/",
         icon: FlaskConical,
     },
     {
         title: "Display",
-        url: "/display",
+        url: "/display/",
         icon: Monitor,
     },
     {
         title: "Architecture",
-        url: "/architecture",
+        url: "/architecture/",
         icon: Package
     }
 ]

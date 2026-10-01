@@ -2,7 +2,7 @@
 import {useContext, useEffect, useState} from "react";
 import Link from "next/link";
 import QRCode from "react-qr-code";
-import {Activity, AlertTriangle, ArrowDown, ArrowRight, ArrowUp, CircleCheck, ExternalLink, Monitor, Smartphone, Wrench} from "lucide-react";
+import {Activity, AlertTriangle, ArrowDown, ArrowRight, ArrowUp, CircleCheck, ExternalLink, FlaskConical, Monitor, Smartphone, Wrench} from "lucide-react";
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
 import {GameField} from "@/components/GameField";
@@ -24,6 +24,7 @@ const STATE_TEXT: Record<string, string> = {
     CLEAN_UP: "Spielfeld wird geleert",
     ERROR: "Gesperrt, offene Fehler",
     SLEEP: "Ruhemodus",
+    TEST: "Testbetrieb läuft, keine Partie möglich",
 };
 
 const PALLET_SIZE = 21;
@@ -65,6 +66,10 @@ function StatusBanner({game, now}: { game: GameData, now: number }) {
         tone = "border-red-300 bg-red-50 text-red-900";
         Icon = AlertTriangle;
         title = "Spiel gesperrt";
+    } else if (state === "TEST") {
+        tone = "border-purple-300 bg-purple-50 text-purple-900";
+        Icon = FlaskConical;
+        title = "Testbetrieb";
     } else if (state === "CLEAN_UP") {
         tone = "border-blue-300 bg-blue-50 text-blue-900";
         Icon = Wrench;
@@ -94,7 +99,7 @@ function StatusBanner({game, now}: { game: GameData, now: number }) {
             {acknowledgeable > 0 && <Button className={"cursor-pointer"} onClick={() => send?.(JSON.stringify({action: "acknowledge_all_faults"}))}>
                 {acknowledgeable} behobene quittieren
             </Button>}
-            {open.length > 0 && <Link href={"/fault-memory"}><Button variant={"outline"} className={"w-full cursor-pointer"}>
+            {open.length > 0 && <Link href={"/fault-memory/"}><Button variant={"outline"} className={"w-full cursor-pointer"}>
                 Fehlerspeicher <ArrowRight className={"size-4"}/>
             </Button></Link>}
         </div>
@@ -106,7 +111,7 @@ function StatusBanner({game, now}: { game: GameData, now: number }) {
 
 function GameCard({game, now}: { game: GameData, now: number }) {
     const state = game.gameState.stateName;
-    const inGame = !["IDLE", "ERROR", "SLEEP"].includes(state);
+    const inGame = !["IDLE", "ERROR", "SLEEP", "TEST"].includes(state);
     const chips = game.gameState.board ? Object.values(game.gameState.board as Record<string, number[]>).reduce((n, column) => n + column.length, 0) : 0;
     const difficulty: Record<string, string> = {easy: "Leicht", medium: "Mittel", hard: "Schwer"};
 
@@ -239,7 +244,7 @@ function RobotCard({game}: { game: GameData }) {
     return <Card className={"gap-3"}>
         <CardHeader className={"flex flex-row items-center justify-between"}>
             <CardTitle>Roboter</CardTitle>
-            <Link href={"/robot"} className={"flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900"}>Roboter-Monitor <ArrowRight className={"size-4"}/></Link>
+            <Link href={"/robot/"} className={"flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900"}>Roboter-Monitor <ArrowRight className={"size-4"}/></Link>
         </CardHeader>
         <CardContent>
             <dl className={"grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm"}>
@@ -273,12 +278,13 @@ function JoinCard({game, now}: { game: GameData, now: number }) {
         <CardContent className={"flex flex-col items-center gap-3"}>
             <div className={"rounded-lg border bg-white p-3"}><QRCode value={game.qrCodeLink} size={150}/></div>
             <div className={"flex w-full flex-col gap-1 text-sm"}>
-                <Link className={"flex items-center gap-2 hover:underline"} target={"_blank"} href={game.qrCodeLink}>
+                <a className={"flex items-center gap-2 hover:underline"} target={"_blank"} href={game.qrCodeLink}>
                     <Smartphone className={"size-4"}/> Spieler-Seite öffnen <ExternalLink className={"size-3 text-gray-400"}/>
-                </Link>
-                <Link className={"flex items-center gap-2 hover:underline"} target={"_blank"} href={`http://${host}:4000/localfrontend`}>
+                </a>
+                {/* another app on the backend, not a page of the control panel */}
+                <a className={"flex items-center gap-2 hover:underline"} target={"_blank"} href={`http://${host}:4000/localfrontend`}>
                     <Monitor className={"size-4"}/> Anzeige vor Ort öffnen <ExternalLink className={"size-3 text-gray-400"}/>
-                </Link>
+                </a>
                 <p className={`mt-1 ${displays.length ? "text-green-700" : "text-yellow-700"}`}>
                     {displays.length ? `${displays.length} ${displays.length === 1 ? "Anzeige" : "Anzeigen"} verbunden (${displays.map((d) => d.indoor ? "innen" : "außen").join(", ")})`
                         : "Keine Anzeige vor Ort verbunden"}
@@ -386,7 +392,7 @@ function EventsCard({game}: { game: GameData }) {
     return <Card className={"gap-3"}>
         <CardHeader className={"flex flex-row items-center justify-between"}>
             <CardTitle>Letzte Warnungen und Fehler</CardTitle>
-            <Link href={"/error-log"} className={"flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900"}>Error Log <ArrowRight className={"size-4"}/></Link>
+            <Link href={"/error-log/"} className={"flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900"}>Error Log <ArrowRight className={"size-4"}/></Link>
         </CardHeader>
         <CardContent>
             {events.length === 0 && <p className={"text-sm text-gray-400"}>Keine Warnungen oder Fehler.</p>}

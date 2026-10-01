@@ -141,6 +141,7 @@ const edges: Edge[] = [
     {id: 'e10-1', source: '10', target: '1', type: 'smoothstep', sourceHandle: 'left', targetHandle: 'bottom'},
 
     {id: 'e10-11', source: '10', target: '11', type: 'smoothstep', sourceHandle: 'bottom', targetHandle: 'top'},
+    {id: 'e11-14', source: '11', target: '14', type: 'smoothstep', sourceHandle: 'right', targetHandle: 'left'},
 
 
 ];
@@ -158,6 +159,8 @@ const initialNodes: Node<CustomNodeProps>[] = [
     {id: '11', type: 'custom', position: {x: 750, y: 700}, data: {label: 'IDLE', active: false, endTime: null, startTime: null, expectedDuration: 0, stateData: null}},
     {id: '12', type: 'custom', position: {x: 1500, y: 100}, data: {label: 'ERROR', active: false, endTime: null, startTime: null, expectedDuration: 0, stateData: null}},
     {id: '13', type: 'custom', position: {x: 1500, y: 300}, data: {label: 'SLEEP', active: false, endTime: null, startTime: null, expectedDuration: 0, stateData: null}},
+    // test operation from the control panel, entered from and left to IDLE
+    {id: '14', type: 'custom', position: {x: 1250, y: 700}, data: {label: 'TEST', active: false, endTime: null, startTime: null, expectedDuration: 0, stateData: null}},
 
 ];
 
@@ -246,23 +249,29 @@ const IDLE_STATES = ["IDLE", "ERROR", "SLEEP"];
 function StateSwitchWarning() {
     const game = useContext(GameDataContext);
     const running = game != null && !IDLE_STATES.includes(game.gameState.stateName);
+    const testing = game?.gameState.stateName === "TEST";
     return <div className={`flex w-full max-w-3xl gap-3 rounded-lg border p-3 text-sm ${running
         ? "border-red-300 bg-red-50 text-red-900"
         : "border-amber-300 bg-amber-50 text-amber-900"}`}>
         <AlertTriangle className={"mt-0.5 size-5 shrink-0"}/>
         <div className={"flex flex-col gap-1"}>
             <p className={"font-semibold"}>
-                {running ? "Achtung, gerade läuft ein Spiel." : "Achtung beim manuellen Zustandswechsel."}
+                {testing ? "Achtung, gerade läuft ein Test." : running ? "Achtung, gerade läuft ein Spiel." : "Achtung beim manuellen Zustandswechsel."}
             </p>
             <p>
                 Ein Zustandswechsel greift direkt in den Spielablauf ein. Im laufenden Spiel kann das zu Problemen
                 führen: Der Roboter kann mitten in einer Bewegung sein oder einen Chip im Greifer halten, das digitale
                 Spielfeld passt dann nicht mehr zum echten und der Spieler kann hängen bleiben.
             </p>
-            <p>
-                Zum Abbrechen oder Eingreifen besser die <Link href={"/"} className={"font-semibold underline"}>Spielleitung
-                in der Übersicht</Link> nutzen, sie wartet sicher das Ende der aktuellen Bewegung ab.
-            </p>
+            {testing
+                ? <p>
+                    Zum Beenden besser den <Link href={"/test/"} className={"font-semibold underline"}>Testbetrieb</Link> nutzen,
+                    er wartet einen sicheren Punkt ab und räumt das Feld vorher auf.
+                </p>
+                : <p>
+                    Zum Abbrechen oder Eingreifen besser die <Link href={"/"} className={"font-semibold underline"}>Spielleitung
+                    in der Übersicht</Link> nutzen, sie wartet sicher das Ende der aktuellen Bewegung ab.
+                </p>}
         </div>
     </div>;
 }
