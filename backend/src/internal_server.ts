@@ -410,7 +410,7 @@ export function initInternalServer() {
             } catch (error) {
                 logEvent({
                     errorType: ErrorType.WARNING,
-                    description: `Error processing message from control panel: ${message.toString()}`,
+                    description: `Error processing message from control panel: ${message.toString()}: ${error}`,
                     date: new Date().toString()
                 });
             }

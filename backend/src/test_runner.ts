@@ -49,6 +49,8 @@ const CYCLE_HISTORY = 50;
 
 let status: TestStatus = emptyStatus();
 let abortRequested = false;
+// why the game left TEST while the test ran, e.g. a fault locked it in ERROR
+let leftTestBecause: string | null = null;
 
 function emptyStatus(): TestStatus {
     return {
@@ -76,6 +78,7 @@ export function startTest(input: Partial<TestConfig>): string | null {
 
     status = {...emptyStatus(), running: true, config, startedAt: new Date().toISOString()};
     abortRequested = false;
+    leftTestBecause = null;
     GameManager.switchState(gameStates.TEST);
     logEvent({errorType: ErrorType.INFO, description: `Testbetrieb gestartet: ${describe(config)}`, date: new Date().toString()});
     run(config);
@@ -104,7 +107,20 @@ async function run(config: TestConfig) {
         recordAction(name, durationMs);
         if (name === "RemoveFromField") status.chipsRemoved++;
     };
+    // a fault switches the game to ERROR at once; stop waiting for the robot then instead of running into the
+    // 30 s timeout of the current action (switchState emits before it changes the state, so check afterwards)
+    const onStateChange = () => setImmediate(() => {
+        const current = GameManager.currentGameState;
+        if (!status.running || current.stateName === "TEST" || leftTestBecause) return;
+        leftTestBecause = current.stateName === "ERROR" && current.stateData?.description
+            ? `Spiel gesperrt: ${current.stateData.description}`
+            : `Spiel ist in den Zustand ${current.stateName} gewechselt`;
+        status.stopRequested = true;
+        interruptRV6LAction();
+        sendState();
+    });
     actionEvents.on("completed", onAction);
+    GameManager.gameEvent.on("stateChange", onStateChange);
     try {
         if (config.mode === "clear") {
             await clear();
@@ -136,9 +152,10 @@ async function run(config: TestConfig) {
         }
         finish(status.stopRequested ? "stopped" : "done");
     } catch (error) {
-        finish(abortRequested ? "aborted" : "failed", error);
+        finish(abortRequested ? "aborted" : "failed", leftTestBecause ?? error);
     } finally {
         actionEvents.off("completed", onAction);
+        GameManager.gameEvent.off("stateChange", onStateChange);
     }
 }
 
