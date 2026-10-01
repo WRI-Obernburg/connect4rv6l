@@ -498,14 +498,16 @@ function reportAlarms() {
 const CRITICAL_ITEMS = new Set([
     "collective_fault", "compressed_air", "safety_controller_error", "collision",
     "collision_axis_1", "collision_axis_2", "collision_axis_3", "collision_axis_4", "collision_axis_5", "collision_axis_6",
-    "pallet_blue", "pallet_red",
 ]);
+// An empty pallet is normal after the last chip of a game or test and the clean-up resets the pallets anyway, so it
+// is only shown; gripping from an empty pallet is refused by the action itself (rv6l_client)
+const NOT_STORED = new Set(["pallet_blue", "pallet_red"]);
 let storedMessageKeys = new Set<string>();
 
 function updateFaultMemory() {
     for (const value of values) {
         // messages of the controller are stored per message number below
-        if (!value.severity || !value.available || value.group === "Meldung") continue;
+        if (!value.severity || !value.available || value.group === "Meldung" || NOT_STORED.has(value.id)) continue;
         updateCondition(`telemetry:${value.id}`, value.alarm, {
             title: value.alarmText ?? value.label,
             severity: value.severity,

@@ -259,6 +259,7 @@ async function ensureRobotReady() {
 export async function moveToBlue() {
     await runAction("MoveToBlue", async () => {
         const before = await palletCounter("blue");
+        expectChipsLeft("blue", before);
         await writeVariableInProc("I_Aktion", "11");
         await movementDone();
         await expectVacuum(true, "dem Greifen des blauen Chips");
@@ -269,6 +270,7 @@ export async function moveToBlue() {
 export async function moveToRed() {
     await runAction("MoveToRed", async () => {
         const before = await palletCounter("red");
+        expectChipsLeft("red", before);
         await writeVariableInProc("I_Aktion", "21");
         await movementDone();
         await expectVacuum(true, "dem Greifen des roten Chips");
@@ -348,6 +350,13 @@ const PALLET_SYMBOL = { blue: "I_blau", red: "I_rot" } as const;
 
 async function palletCounter(color: "blue" | "red") {
     return Number(await readVariableInProc(PALLET_SYMBOL[color]));
+}
+
+// the counter is 0 after the last chip was taken; gripping again would go past the end of the magazine
+function expectChipsLeft(color: "blue" | "red", counter: number) {
+    if (counter > 0) return;
+    const name = color === "blue" ? "blau" : "rot";
+    throw new Error(`Palette ${name} ist leer (Zähler ${PALLET_SYMBOL[color]} ${counter}). Erst aufräumen oder die Paletten initialisieren.`);
 }
 
 async function expectPalletStep(color: "blue" | "red", before: number, action: string) {
