@@ -6,12 +6,14 @@ import { RV6L_STATE } from "./rv6l_client.ts";
 import { GameManager, gameStates } from "./game/game_manager.ts";
 import { publicQueue } from "./players.ts";
 import { ErrorType, logEvent } from "./errorHandler/error_handler.ts";
+import { handleCallback, initPanels, openPanel } from "./telegram_panels.ts";
 
 /**
  * Telegram bot for the RV6L. Every approved contact
  * - gets a push for every critical fault and an all-clear once the game is free again,
  * - has a status message pinned at the top of the chat that the bot keeps up to date,
- * - can use /status, /sleep and /wake (also as buttons) and lock the game with /error <message>.
+ * - can use /status, /sleep and /wake (also as buttons) and lock the game with /error <message>,
+ * - can steer the robot by hand, act as game master and manage the queue (/hand, /spiel, /warteschlange).
  * It polls the Bot API (long polling), so it needs no open port or webhook on the Pi.
  *
  * Whoever writes /start is only a request: the contact gets nothing until it is approved in the control panel,
@@ -48,9 +50,9 @@ const lastSent = new Map<string, number>();
 const isApproved = (chatId: number) => contacts.some((c) => c.chatId === chatId && c.approvedAt);
 
 // buttons below the input field, so the common commands need no typing
-const BUTTONS = { status: "📊 Status", sleep: "😴 Schlafen", wake: "☀️ Aufwecken" };
+const BUTTONS = { status: "📊 Status", sleep: "😴 Schlafen", wake: "☀️ Aufwecken", hand: "🦾 Steuerung", game: "🎮 Spielleitung", queue: "👥 Warteschlange" };
 const KEYBOARD = {
-    keyboard: [[{ text: BUTTONS.status }], [{ text: BUTTONS.sleep }, { text: BUTTONS.wake }]],
+    keyboard: [[{ text: BUTTONS.status }, { text: BUTTONS.game }, { text: BUTTONS.queue }], [{ text: BUTTONS.sleep }, { text: BUTTONS.wake }, { text: BUTTONS.hand }]],
     resize_keyboard: true,
     is_persistent: true,
 };
@@ -59,9 +61,12 @@ const COMMANDS = [
     { command: "sleep", description: "Roboter schlafen legen (nur aus IDLE)" },
     { command: "wake", description: "Roboter aufwecken" },
     { command: "error", description: "Spiel sofort sperren: /error <Meldung>" },
+    { command: "spiel", description: "Spielleitung: beenden, neu starten, Zug setzen" },
+    { command: "warteschlange", description: "Warteschlange verwalten" },
+    { command: "hand", description: "Roboter von Hand steuern (nur in ERROR oder SLEEP)" },
     { command: "stop", description: "Abmelden" },
 ];
-const HELP = "/status – aktueller Zustand\n/sleep – Roboter schlafen legen (nur aus IDLE)\n/wake – Roboter aufwecken\n/error &lt;Meldung&gt; – Spiel sofort sperren\n/stop – abmelden";
+const HELP = "/status – aktueller Zustand\n/sleep – Roboter schlafen legen (nur aus IDLE)\n/wake – Roboter aufwecken\n/error &lt;Meldung&gt; – Spiel sofort sperren\n/spiel – Spielleitung\n/warteschlange – Warteschlange verwalten\n/hand – Roboter von Hand steuern (nur in ERROR oder SLEEP)\n/stop – abmelden";
 
 /** For the control panel: whether the bot runs and who is approved or waits for approval. */
 export function getTelegramState() {
@@ -90,6 +95,7 @@ export function initTelegramBot() {
     // tells the control panel right away whether the token works, the first long poll may take 50 s
     call("getMe").then(() => setConnected(true)).catch((error) => console.error("Telegram getMe failed", String(error)));
     call("setMyCommands", { commands: COMMANDS }).catch((error) => console.error("Telegram setMyCommands failed", String(error)));
+    initPanels(call);
     setInterval(() => updatePinnedStatus().catch((error) => console.error("Telegram status update failed", String(error))), STATUS_CHECK_MS);
     poll();
 }
@@ -119,11 +125,12 @@ async function poll() {
     let offset = 0;
     while (true) {
         try {
-            const updates = await call("getUpdates", { offset, timeout: POLL_TIMEOUT_S, allowed_updates: ["message"] }, (POLL_TIMEOUT_S + 10) * 1000);
+            const updates = await call("getUpdates", { offset, timeout: POLL_TIMEOUT_S, allowed_updates: ["message", "callback_query"] }, (POLL_TIMEOUT_S + 10) * 1000);
             setConnected(true);
             for (const update of updates) {
                 offset = update.update_id + 1;
                 if (update.message?.text) await handleMessage(update.message).catch((error) => console.error("Telegram message failed", String(error)));
+                if (update.callback_query) await handleButton(update.callback_query).catch((error) => console.error("Telegram button failed", String(error)));
             }
         } catch (error) {
             setConnected(false);
@@ -137,7 +144,7 @@ async function handleMessage(message: any) {
     const chatId: number = message.chat.id;
     const text = String(message.text).trim();
     // in groups commands come as /start@botname; the buttons send their label
-    const command = ({ [BUTTONS.status]: "/status", [BUTTONS.sleep]: "/sleep", [BUTTONS.wake]: "/wake" } as Record<string, string>)[text]
+    const command = ({ [BUTTONS.status]: "/status", [BUTTONS.sleep]: "/sleep", [BUTTONS.wake]: "/wake", [BUTTONS.hand]: "/hand", [BUTTONS.game]: "/spiel", [BUTTONS.queue]: "/warteschlange" } as Record<string, string>)[text]
         ?? text.split(/\s+/)[0]!.split("@")[0];
     const argument = text.slice(text.split(/\s+/)[0]!.length).trim();
     const person = [message.from?.first_name, message.from?.last_name].filter(Boolean).join(" ");
@@ -185,9 +192,28 @@ async function handleMessage(message: any) {
         case "/error":
             await send(chatId, raiseError(argument, name));
             return;
+        case "/hand":
+            await openPanel("hand", chatId);
+            return;
+        case "/spiel":
+            await openPanel("game", chatId);
+            return;
+        case "/warteschlange":
+            await openPanel("queue", chatId);
+            return;
         default:
             await send(chatId, HELP, KEYBOARD);
     }
+}
+
+// A click on a button of a panel (manual control, game master, queue); only approved chats may use them
+async function handleButton(query: any) {
+    const chatId: number = query.message?.chat?.id;
+    const person = [query.from?.first_name, query.from?.last_name].filter(Boolean).join(" ");
+    let notice: string;
+    if (chatId == null || !isApproved(chatId)) notice = "Nicht freigegeben.";
+    else notice = await handleCallback(query, person || String(query.from?.id ?? chatId));
+    await call("answerCallbackQuery", { callback_query_id: query.id, text: notice.slice(0, 200) });
 }
 
 // Only between IDLE and SLEEP, so a running game, test or a locked game is never interrupted from the phone
