@@ -42,13 +42,14 @@ function RenderCell({ entryState, highlight, xl }: { entryState: number | null; 
           transition={{ duration: 0.4, type: "spring", bounce: 0.3 }}
           className={cn(
             xl?"w-20 h-20":"w-10 h-10", "border absolute rounded-full",
+            // 1 is the player's blue chip, 2 the robot's red one
             entryState === 1
-              ? "bg-red-500"
-              : entryState === 2
               ? "bg-blue-500"
+              : entryState === 2
+              ? "bg-red-500"
               : "bg-gray-200",
-            highlight && entryState === 2 && "shadow-blue-500 shadow-xl",
-            highlight && entryState === 1 && "shadow-red-500 shadow-xl"
+            highlight && entryState === 1 && "shadow-blue-500 shadow-xl",
+            highlight && entryState === 2 && "shadow-red-500 shadow-xl"
           )}
         />
       )}

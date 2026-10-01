@@ -22,7 +22,7 @@ function RenderCell({ entryState, highlight, xl }: { entryState: number | null; 
           transition={{ duration: 0.4, type: "spring", bounce: 0.3 }}
           className={cn(
             size, "absolute inset-0 rounded-full",
-            entryState === 1 ? "chip-red" : entryState === 2 ? "chip-blue" : "",
+            entryState === 1 ? "chip-blue" : entryState === 2 ? "chip-red" : "",
             highlight && "ring-[3px] ring-white"
           )}
         />

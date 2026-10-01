@@ -236,13 +236,13 @@ function Statistics({test}: { test: TestStatus }) {
     </Card>;
 }
 
-// same colors as the other boards: 1 (the player's chip) red, 2 (the robot's) blue; row 0 is the bottom row
+// 1 is the player's blue chip, 2 the robot's red one; row 0 is the bottom row
 function Board({board}: { board: Record<string, number[]> | null }) {
     return <div className={"flex justify-center gap-1.5 self-center rounded-lg border border-gray-300 p-2"}>
         {Array.from({length: 7}).map((_, column) => <div key={column} className={"flex flex-col gap-1.5"}>
             {Array.from({length: 6}).map((_, i) => {
                 const chip = board?.[column]?.[5 - i];
-                const color = chip === 1 ? "bg-red-500" : chip === 2 ? "bg-blue-500" : "bg-gray-100";
+                const color = chip === 1 ? "bg-blue-500" : chip === 2 ? "bg-red-500" : "bg-gray-100";
                 return <div key={i} className={`h-8 w-8 rounded-full border border-gray-400 ${color}`}/>;
             })}
         </div>)}

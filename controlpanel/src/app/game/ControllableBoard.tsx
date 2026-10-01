@@ -126,7 +126,7 @@ export function ControllableBoard(){
 
 function Cell({value, onClick}: {value: number, onClick: () => void}) {
     return (
-        <div className={"rounded-full w-12 h-12 flex items-center justify-center cursor-pointer border border-gray-700 " + (value === 0 ? "bg-gray-300": value===1?"bg-red-600 ":"bg-blue-600")} onClick={onClick}>
+        <div className={"rounded-full w-12 h-12 flex items-center justify-center cursor-pointer border border-gray-700 " + (value === 0 ? "bg-gray-300": value===1?"bg-blue-600 ":"bg-red-600")} onClick={onClick}>
 
         </div>
     );
