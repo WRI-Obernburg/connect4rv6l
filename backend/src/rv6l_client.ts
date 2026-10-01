@@ -374,9 +374,10 @@ async function expectPalletStep(color: "blue" | "red", before: number, action: s
     }
 }
 
-// The robot program switches the suction cup with output byte 20 bit 0 (bit 0 of _IBIN_OUT[6]).
-// There is no vacuum sensor, but a wrong output state after a movement means the program did not do
-// what was expected, so the chip is probably not where the game thinks it is.
+// The robot program switches the suction cup with output byte 20 bit 0 (bit 0 of _IBIN_OUT[6]). A wrong output
+// state after a movement means the program did not do what was expected, so the chip is probably not where the
+// game thinks it is. Whether a chip really hangs on the suction cup is measured by the vacuum switch, see
+// checkVacuumSwitch.
 async function expectVacuum(on: boolean, after: string) {
     const output = Number(await readVariableInProc("_IBIN_OUT[6]"));
     if (((output & 1) === 1) !== on) {

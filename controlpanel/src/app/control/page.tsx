@@ -5,7 +5,7 @@ import {Button} from "@/components/ui/button";
 import {useContext} from "react";
 import {GameDataContext, WebsocketSendContext} from "@/provider/WebsocketProvider";
 import {Checkbox} from "@/components/ui/checkbox";
-import {GameData} from "@/app/models/GameData";
+import {GameData, TelemetryValue} from "@/app/models/GameData";
 import {RobotTelemetry, VariableExplorer} from "@/app/control/RobotTelemetry";
 
 import {
@@ -35,6 +35,7 @@ export default function ManualControlPage() {
                 <p>{gameDataContext!.rv6l.moving ? "RV6L bewegt sich" : "RV6L steht"}</p>
                 <p>MSG-Counter: {gameDataContext!.rv6l.messageCounter}</p>
                 <p>Übrige Chips Rot: {gameDataContext!.rv6l.redChipsLeft} Blau: {gameDataContext!.rv6l.blueChipsLeft}</p>
+                <VacuumStatus values={gameDataContext!.rv6l.telemetry?.values ?? []}/>
                 <p className={"text-red-500"}>{gameDataContext!.rv6l.mock && "RV6L Verbindung wird gemockt!"}</p>
             </CardHeader>
             <CardContent>
@@ -266,4 +267,18 @@ function PlaceChip(props: { isMoving: boolean }) {
         </CardContent>
 
     </Card>
+}
+
+// The suction cup output and the vacuum switch, so it is clear whether a chip really hangs on the gripper
+function VacuumStatus({values}: { values: TelemetryValue[] }) {
+    const output = values.find((v) => v.id === "vacuum");
+    const sensor = values.find((v) => v.id === "vacuum_switch");
+    if (!output?.available && !sensor?.available) return null;
+    return <>
+        {output?.available && <p>Sauger: {output.value === 1 ? "an" : "aus"}</p>}
+        {sensor?.available && <p className={"flex items-center gap-2"}>
+            <span className={`inline-block size-3 rounded-full ${sensor.value === 1 ? "bg-green-500" : "bg-gray-300"}`}/>
+            Vakuumschalter: {sensor.value === 1 ? "Vakuum, ein Chip hängt" : "kein Vakuum"}
+        </p>}
+    </>;
 }
