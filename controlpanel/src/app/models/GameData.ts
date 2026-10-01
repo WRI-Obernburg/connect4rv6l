@@ -109,6 +109,51 @@ export interface TelegramContact {
     approvedAt?: string
 }
 
+export interface AIDecision {
+    difficulty: string
+    // negamax score per column, null for a full column (positive: the robot can force a win)
+    scores: (number | null)[]
+    // scores of tier 1 to 3 as the library computed them
+    tiers: [number, number, number]
+    ratios: { tier1: number, tier2: number, tier3: number }
+    // the random number that picked the tier, and the tier it picked
+    draw: number
+    tier: 1 | 2 | 3
+    candidates: number[]
+    durationMs: number
+}
+
+export interface AnalysisMove {
+    number: number
+    by: "player" | "robot"
+    column: number
+    // board before the move, columns from the bottom (1 player, 2 robot)
+    boardBefore: Record<string, number[]>
+    at: string
+    decision?: AIDecision
+}
+
+export interface CleanupStep {
+    column: number
+    row: number
+    color: 1 | 2
+    status: "pending" | "removing" | "returning" | "done" | "failed"
+    startedAt?: string
+    durationMs?: number
+}
+
+export interface Analysis {
+    game: { startedAt: string, moves: AnalysisMove[], result: string | null } | null
+    cleanup: {
+        reason: string
+        startedAt: string
+        finishedAt: string | null
+        phase: "init" | "chips" | "reinit" | "done" | "failed"
+        steps: CleanupStep[]
+        error: string | null
+    } | null
+}
+
 export interface GameData {
     gameState: {
         isPlayerConnected: boolean
@@ -164,6 +209,7 @@ export interface GameData {
     },
     players?: PlayersState,
     testRun?: TestStatus,
+    analysis?: Analysis,
     telegram?: { enabled: boolean, connected: boolean, contacts: TelegramContact[] },
     qrCodeLink: string,
     errors: ErrorDescription[],

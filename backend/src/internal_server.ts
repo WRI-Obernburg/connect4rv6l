@@ -6,6 +6,7 @@ import {adminQueue, moveInQueue, publicQueue, removeFromQueue, renewOffer} from 
 import {placeChipForPlayer} from "./game_server.ts";
 import {abortTest, getTestStatus, requestTestStop, startTest} from "./test_runner.ts";
 import {approveContact, getTelegramState, removeContact} from "./telegram_bot.ts";
+import {getAnalysis} from "./game/game_analysis.ts";
 import express from 'express';
 import WebSocket from 'ws';
 import {resetGame, setBoard} from './game/game.ts';
@@ -460,6 +461,7 @@ function sendControlPanelState(ws: WebSocket) {
             faultMemory: getFaultMemory(),
             testRun: getTestStatus(),
             telegram: getTelegramState(),
+            analysis: getAnalysis(),
             qrCodeLink: FRONTEND_ADDRESS + "/play?sessionID=" + sessionState.currentSessionID,
             players: adminQueue(),
             errors: errors,

@@ -189,7 +189,7 @@ async function clear() {
     sendState();
     ensureStillInTest();
     // a requested stop waits for the board to be cleared: a half cleared board would leave the pallet counters wrong
-    await clearPhysicalBoard();
+    await clearPhysicalBoard("Testbetrieb");
     resetGame();
 }
 

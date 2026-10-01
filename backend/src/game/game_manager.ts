@@ -8,6 +8,7 @@ import {sendState, state} from "../state.ts";
 import type GameState from "./game_state.ts";
 import type {GameStateOutput} from "./game_state.ts";
 import EventEmitter from 'events';
+import {cleanupFailed, cleanupPhase, cleanupStep, recordResult, startCleanup} from "./game_analysis.ts";
 
 const PlayerSelect: GameState<void, number> = {
     stateName: "PLAYER_SELECTION",
@@ -224,7 +225,7 @@ const CleanUp: GameState<boolean, void> = {
     startTime: null,
     endTime: null,
     action: async (instantRestart: boolean) => {
-        await clearPhysicalBoard();
+        await clearPhysicalBoard(instantRestart ? "Vor dem neuen Spiel" : "Nach dem Spiel");
         resetGame();
 
         if (instantRestart) {
@@ -260,6 +261,7 @@ const RobotWin: GameState<void, boolean> = {
     // the result stays visible on the phone, the board is cleared right away so nobody has to wait
     action: async () => {
         finishGame("robot");
+        recordResult("robot");
         return {
             canContinue: true,
             subsequentState: CleanUp,
@@ -291,6 +293,7 @@ const PlayerWin: GameState<void, boolean> = {
     // the result stays visible on the phone, the board is cleared right away so nobody has to wait
     action: async () => {
         finishGame("player");
+        recordResult("player");
         return {
             canContinue: true,
             subsequentState: CleanUp,
@@ -307,6 +310,7 @@ const Tie: GameState<void, boolean> = {
     // the result stays visible on the phone, the board is cleared right away so nobody has to wait
     action: async () => {
         finishGame("tie");
+        recordResult("tie");
         return {
             canContinue: true,
             subsequentState: CleanUp,
@@ -332,10 +336,23 @@ const TestMode: GameState<void, void> = {
 }
 
 /** Takes every chip on the board back to its magazine, top chip first, and resets the pallets for the next game. */
-export async function clearPhysicalBoard() {
+export async function clearPhysicalBoard(reason: string) {
+    // every step is recorded, so the control panel shows the clean-up as it happens and afterwards
+    startCleanup(state.board, reason);
+    try {
+        await clearChips();
+        cleanupPhase("done");
+    } catch (error) {
+        cleanupFailed(error);
+        throw error;
+    }
+}
+
+async function clearChips() {
     // PALETTE #EIN counts on for gripping and for putting back alike. Reset the pallets so the chips go back
     // to the places they were taken from (0 .. n-1) instead of onto places that are still full.
     await initChipPalletizing();
+    cleanupPhase("chips");
 
     // iterate over a copy: the board shown to players and displays loses each chip as soon as the robot took it
     const board: Record<string, number[]> | null = state.board ? JSON.parse(JSON.stringify(state.board)) : null;
@@ -346,7 +363,9 @@ export async function clearPhysicalBoard() {
             const element = column[row];
             // IZ_Feld counts from the bottom row (the PALETTE_FELD centre point is the lowest position), like the
             // board's rows do; the top chip has to go first, at its own height
+            cleanupStep(i, row, "removing");
             await removeFromField(i, row);
+            cleanupStep(i, row, "returning");
             const shown = state.board;
             if (shown?.[i]) {
                 state.board = {...shown, [i]: shown[i]!.slice(0, row)};
@@ -357,10 +376,12 @@ export async function clearPhysicalBoard() {
             } else if (element === 2) {
                 await putBackToRed();
             }
+            cleanupStep(i, row, "done");
         }
     }
 
     // and again afterwards, so the next game starts gripping at place 0 of the refilled magazines
+    cleanupPhase("reinit");
     await initChipPalletizing();
     GameManager.isPhysicalBoardCleaned = true;
 }
@@ -396,6 +417,7 @@ const RESULT_STATES = ["PLAYER_WIN", "ROBOT_WIN", "TIE"];
 function applyStop(stop: PendingStop) {
     pendingStop = null;
     if (!stop.restart) finishGame("aborted");
+    recordResult(stop.restart ? "restarted" : "aborted");
     logEvent({
         errorType: ErrorType.INFO,
         description: stop.restart ? "Spielleitung: Spiel wird neu gestartet" : "Spielleitung: Spiel abgebrochen",
