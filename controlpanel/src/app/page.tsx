@@ -2,7 +2,7 @@
 import {useContext, useEffect, useState} from "react";
 import Link from "next/link";
 import QRCode from "react-qr-code";
-import {Activity, AlertTriangle, ArrowRight, CircleCheck, ExternalLink, Monitor, Smartphone, Wrench} from "lucide-react";
+import {Activity, AlertTriangle, ArrowDown, ArrowRight, ArrowUp, CircleCheck, ExternalLink, Monitor, Smartphone, Wrench} from "lucide-react";
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
 import {GameField} from "@/components/GameField";
@@ -122,8 +122,98 @@ function GameCard({game, now}: { game: GameData, now: number }) {
                 <dt className={"text-gray-500"}>Chips im Feld</dt><dd>{chips}</dd>
                 <dt className={"text-gray-500"}>Schwierigkeit</dt><dd>{difficulty[game.gameState.difficulty] ?? game.gameState.difficulty}</dd>
             </dl>
+            <GameMasterSection game={game} now={now}/>
         </CardContent>
     </Card>;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Game master: stop or steer the running game without switching states by hand. The backend waits for the end
+// of a robot movement (and places a gripped chip first), so the board and the robot stay in step.
+
+const RUNNING_STATES = ["PLAYER_SELECTION", "GRAP_BLUE_CHIP", "PLACE_BLUE_CHIP", "ROBOT_SELECTION", "GRAP_RED_CHIP", "PLACE_RED_CHIP"];
+const RESULT_STATES = ["PLAYER_WIN", "ROBOT_WIN", "TIE"];
+const DIFFICULTIES: [string, string][] = [["easy", "Leicht"], ["medium", "Mittel"], ["hard", "Schwer"]];
+const ROWS = 6;
+
+function GameMasterSection({game, now}: { game: GameData, now: number }) {
+    const send = useContext(WebsocketSendContext);
+    const action = (payload: object) => send?.(JSON.stringify(payload));
+    const state = game.gameState.stateName;
+    const running = RUNNING_STATES.includes(state);
+    const pending = game.gameManager.pendingStop;
+    const board = (game.gameState.board ?? {}) as Record<string, number[]>;
+    const player = game.players?.active?.nickname;
+
+    return <div className={"flex w-full flex-col gap-3 border-t pt-3"}>
+        <p className={"font-semibold"}>Spielleitung</p>
+
+        {pending && <div className={"flex items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900"}>
+            <span>
+                {pending.restart ? "Neustart" : "Abbruch"} nach der aktuellen Roboterbewegung
+                <span className={"text-amber-700"}> (angefordert vor {sinceText(pending.requestedAt, now)})</span>
+            </span>
+            <Button size={"sm"} variant={"outline"} className={"cursor-pointer"} onClick={() => action({action: "gm_cancel_stop"})}>Zurücknehmen</Button>
+        </div>}
+
+        {!running && !RESULT_STATES.includes(state)
+            ? <p className={"text-sm text-gray-400"}>Kein Spiel läuft.</p>
+            : <div className={"flex flex-wrap gap-2"}>
+                <ConfirmButton label={"Spiel abbrechen"} confirm={`Spiel${player ? ` von ${player}` : ""} abbrechen und Feld leeren?`}
+                               disabled={!running || !!pending} destructive
+                               onConfirm={() => action({action: "gm_stop_game", restart: false})}/>
+                <ConfirmButton label={"Neu starten"} confirm={"Feld leeren und mit demselben Spieler neu starten?"}
+                               disabled={!!pending}
+                               onConfirm={() => action({action: "gm_stop_game", restart: true})}/>
+            </div>}
+
+        {state === "PLAYER_SELECTION" && <div className={"flex flex-col gap-1"}>
+            <p className={"text-sm text-gray-500"}>Zug für {player ?? "den Spieler"} setzen</p>
+            <div className={"grid grid-cols-7 gap-1"}>
+                {Array.from({length: 7}, (_, column) => {
+                    const full = (board[column]?.length ?? 0) >= ROWS;
+                    return <ConfirmButton key={column} label={String(column + 1)} compact disabled={full}
+                                          confirm={`Chip in Spalte ${column + 1}?`}
+                                          onConfirm={() => action({action: "gm_place_chip", slot: column})}/>;
+                })}
+            </div>
+        </div>}
+
+        <div className={"flex items-center justify-between gap-2 text-sm"}>
+            <span className={"text-gray-500"}>Schwierigkeit</span>
+            <div className={"flex overflow-hidden rounded-md border"}>
+                {DIFFICULTIES.map(([key, label]) => <button key={key}
+                    className={`cursor-pointer px-3 py-1 ${game.gameState.difficulty === key ? "bg-gray-900 text-white" : "hover:bg-gray-100"}`}
+                    onClick={() => action({action: "gm_set_difficulty", difficulty: key})}>{label}</button>)}
+            </div>
+        </div>
+    </div>;
+}
+
+// Asks once more before an intervention; the question replaces the button until confirmed or cancelled
+function ConfirmButton(props: { label: string, confirm: string, onConfirm: () => void, disabled?: boolean, destructive?: boolean, compact?: boolean }) {
+    const [asking, setAsking] = useState(false);
+    useEffect(() => {
+        if (!asking) return;
+        const id = setTimeout(() => setAsking(false), 8000);
+        return () => clearTimeout(id);
+    }, [asking]);
+    useEffect(() => { if (props.disabled) setAsking(false); }, [props.disabled]);
+
+    if (asking && props.compact) {
+        return <Button size={"sm"} title={props.confirm} className={"cursor-pointer bg-blue-700 px-0 hover:bg-blue-800"}
+                       onClick={() => { setAsking(false); props.onConfirm(); }}>OK?</Button>;
+    }
+    if (asking) {
+        return <div className={"flex w-full flex-wrap items-center gap-2 rounded-md border bg-gray-50 p-2 text-sm"}>
+            <span className={"mr-auto"}>{props.confirm}</span>
+            <Button size={"sm"} variant={props.destructive ? "destructive" : "default"} className={"cursor-pointer"}
+                    onClick={() => { setAsking(false); props.onConfirm(); }}>Ja</Button>
+            <Button size={"sm"} variant={"outline"} className={"cursor-pointer"} onClick={() => setAsking(false)}>Nein</Button>
+        </div>;
+    }
+    return <Button size={"sm"} variant={props.destructive ? "destructive" : "outline"} disabled={props.disabled}
+                   className={`cursor-pointer ${props.compact ? "px-0" : ""}`} onClick={() => setAsking(true)}>{props.label}</Button>;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -199,7 +289,7 @@ function JoinCard({game, now}: { game: GameData, now: number }) {
     </Card>;
 }
 
-const RESULT_TEXT = {player: "hat gewonnen", robot: "hat gegen den Roboter verloren", tie: "spielte unentschieden"};
+const RESULT_TEXT = {player: "hat gewonnen", robot: "hat gegen den Roboter verloren", tie: "spielte unentschieden", aborted: "wurde von der Spielleitung beendet"};
 const OFFER_SECONDS = 60;
 
 // Who plays and who waits; entries can be removed, e.g. when someone left
@@ -228,8 +318,18 @@ function QueueSection({game, now}: { game: GameData, now: number }) {
                             {entry.offeredAt && `, ist dran (${Math.max(0, OFFER_SECONDS - Math.round((now - entry.offeredAt) / 1000))} s)`}
                         </span>
                     </span>
-                    <button className={"cursor-pointer text-xs text-gray-400 hover:text-red-600"}
-                            onClick={() => send?.(JSON.stringify({action: "remove_from_queue", clientId: entry.clientId}))}>entfernen</button>
+                    <span className={"flex shrink-0 items-center gap-1"}>
+                        {entry.offeredAt && <button className={"cursor-pointer text-xs text-gray-400 hover:text-gray-900"} title={"Die volle Startzeit erneut geben"}
+                                                    onClick={() => send?.(JSON.stringify({action: "gm_renew_offer"}))}>mehr Zeit</button>}
+                        <button className={"cursor-pointer text-gray-400 hover:text-gray-900 disabled:cursor-default disabled:opacity-30"} title={"nach vorne"}
+                                disabled={entry.position === 1}
+                                onClick={() => send?.(JSON.stringify({action: "gm_move_in_queue", clientId: entry.clientId, delta: -1}))}><ArrowUp className={"size-3.5"}/></button>
+                        <button className={"cursor-pointer text-gray-400 hover:text-gray-900 disabled:cursor-default disabled:opacity-30"} title={"nach hinten"}
+                                disabled={entry.position === players.queue.length}
+                                onClick={() => send?.(JSON.stringify({action: "gm_move_in_queue", clientId: entry.clientId, delta: 1}))}><ArrowDown className={"size-3.5"}/></button>
+                        <button className={"cursor-pointer text-xs text-gray-400 hover:text-red-600"}
+                                onClick={() => send?.(JSON.stringify({action: "remove_from_queue", clientId: entry.clientId}))}>entfernen</button>
+                    </span>
                 </li>)}
             </ol>}
     </div>;

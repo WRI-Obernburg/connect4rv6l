@@ -69,7 +69,7 @@ export interface QueueEntry {
 export interface PlayersState {
     active: { clientId: string, nickname: string } | null
     queue: QueueEntry[]
-    lastResult: { winner: "player" | "robot" | "tie", nickname: string, at: number } | null
+    lastResult: { winner: "player" | "robot" | "tie" | "aborted", nickname: string, at: number } | null
 }
 
 export type TestMode = "fill" | "clear" | "cycle"
@@ -116,6 +116,8 @@ export interface GameData {
     }
     gameManager: {
         isPhysicalBoardCleaned: boolean
+        // a stop requested by the game master, taken after the current robot movement
+        pendingStop?: { restart: boolean, requestedAt: number } | null
     },
     gameStates: {
         IDLE: GameState

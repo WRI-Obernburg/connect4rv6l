@@ -16,7 +16,7 @@ const MAX_QUEUE = 20;
 const MAX_NICKNAME = 20;
 
 export type QueueEntry = { clientId: string, nickname: string, joinedAt: number, offeredAt?: number, disconnectedAt?: number };
-export type GameResult = { winner: "player" | "robot" | "tie", clientId: string | null, nickname: string, at: number };
+export type GameResult = { winner: "player" | "robot" | "tie" | "aborted", clientId: string | null, nickname: string, at: number };
 
 const sockets = new Map<string, Set<WebSocket>>();
 const nicknames = new Map<string, string>();
@@ -93,6 +93,28 @@ export function removeFromQueue(clientId: string) {
     if (!entry) return;
     leaveQueue(clientId);
     logEvent({ errorType: ErrorType.INFO, description: `${entry.nickname} aus der Warteschlange entfernt`, date: new Date().toString() });
+}
+
+/** Moves an entry up (negative) or down in the queue; the one who gets to the front is offered the turn anew. */
+export function moveInQueue(clientId: string, delta: number) {
+    const from = queue.findIndex((e) => e.clientId === clientId);
+    if (from < 0) return false;
+    const to = Math.max(0, Math.min(queue.length - 1, from + delta));
+    if (to === from) return false;
+    const firstBefore = queue[0];
+    const [entry] = queue.splice(from, 1);
+    queue.splice(to, 0, entry!);
+    if (queue[0] !== firstBefore) {
+        delete firstBefore?.offeredAt;
+        delete queue[0]!.offeredAt;
+    }
+    logEvent({ errorType: ErrorType.INFO, description: `Spielleitung: ${entry!.nickname} auf Platz ${to + 1} verschoben`, date: new Date().toString() });
+    return true;
+}
+
+/** Gives the one who is offered the turn the full time again. */
+export function renewOffer() {
+    if (queue[0]?.offeredAt) queue[0].offeredAt = Date.now();
 }
 
 /**

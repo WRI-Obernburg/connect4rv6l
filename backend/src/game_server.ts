@@ -155,6 +155,15 @@ export function initServer() {
     })
 }
 
+/** The game master places the chip for the player (control panel), only while the player chooses. */
+export function placeChipForPlayer(slot: number) {
+    if (GameManager.currentGameState.stateName !== "PLAYER_SELECTION") return false;
+    logEvent({ errorType: ErrorType.INFO, description: `Spielleitung: Zug für den Spieler in Spalte ${slot + 1}`, date: new Date().toString() });
+    state.lastUserInteraction = Date.now();
+    handlePlaceChip({ slot });
+    return true;
+}
+
 function handlePlaceChip(parsedMSG: any) {
     if (parsedMSG.slot != null && !isNaN(parsedMSG.slot) && parsedMSG.slot >= 0 && parsedMSG.slot < 7) {
         

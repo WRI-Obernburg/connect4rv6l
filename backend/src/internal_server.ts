@@ -1,8 +1,9 @@
-import {GameManager, gameStates} from "./game/game_manager.ts";
+import {GameManager, gameStates, getPendingStop} from "./game/game_manager.ts";
 import {getTelemetry, listSymbolsForExplorer, readSymbolsForExplorer} from "./rv6l_telemetry.ts";
 import {acknowledgeAllInactive, acknowledgeFault, createManualFault, getFaultMemory, updateLock} from "./fault_memory.ts";
 import {getCoincidence, getLogbook, getProgramSource, getSystemInfo, getTasks} from "./rv6l_monitor.ts";
-import {adminQueue, publicQueue, removeFromQueue} from "./players.ts";
+import {adminQueue, moveInQueue, publicQueue, removeFromQueue, renewOffer} from "./players.ts";
+import {placeChipForPlayer} from "./game_server.ts";
 import {abortTest, getTestStatus, requestTestStop, startTest} from "./test_runner.ts";
 import express from 'express';
 import WebSocket from 'ws';
@@ -240,6 +241,32 @@ async function handleControlPanelMessage(ws: WebSocket, data: any) {
             removeFromQueue(String(payload.clientId));
             sendState();
         },
+        // game master: intervene without switching states by hand
+        async gm_stop_game(payload) {
+            GameManager.requestStop(payload.restart === true);
+        },
+        async gm_cancel_stop() {
+            GameManager.cancelStop();
+        },
+        async gm_place_chip(payload) {
+            const slot = Number(payload.slot);
+            if (Number.isInteger(slot) && slot >= 0 && slot < 7) placeChipForPlayer(slot);
+        },
+        async gm_set_difficulty(payload) {
+            if (!['easy', 'medium', 'hard'].includes(payload.difficulty)) return;
+            state.difficulty = payload.difficulty;
+            logEvent({ errorType: ErrorType.INFO, description: `Spielleitung: Schwierigkeit ${payload.difficulty}`, date: new Date().toString() });
+            sendState();
+        },
+        async gm_move_in_queue(payload) {
+            const delta = Number(payload.delta);
+            if (!Number.isInteger(delta)) return;
+            if (moveInQueue(String(payload.clientId), delta)) sendState();
+        },
+        async gm_renew_offer() {
+            renewOffer();
+            sendState();
+        },
         // test operation: fill the board at random and clear it again, once or as an endurance test
         async test_start(payload) {
             const refusal = startTest(payload.config ?? {});
@@ -409,6 +436,7 @@ function sendControlPanelState(ws: WebSocket) {
             sessionState: sessionState,
             gameManager: {
                 isPhysicalBoardCleaned: GameManager.isPhysicalBoardCleaned,
+                pendingStop: getPendingStop(),
             },
             gameStates: gameStates,
             rv6l: {

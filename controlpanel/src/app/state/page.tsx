@@ -12,7 +12,8 @@ import {ReactFlow, Handle, Position, Edge, Node} from '@xyflow/react';
 import {useContext, useEffect, useState, useReducer} from "react";
 import {GameDataContext, WebsocketSendContext} from "@/provider/WebsocketProvider";
 import {Card, CardContent, CardFooter, CardHeader, CardTitle} from "@/components/ui/card";
-import {Braces} from "lucide-react";
+import {AlertTriangle, Braces} from "lucide-react";
+import Link from "next/link";
 import {Button} from "@/components/ui/button";
 
 type CustomNodeProps = {
@@ -99,6 +100,10 @@ const CustomNode: React.FC<CustomNodeProps> = ({data}) => {
                         <p>Zeitbudget: {data.expectedDuration ? Math.floor(data.expectedDuration/1000) + " s" : "Unbegrenzt"}</p>
                         <p>Zuletzt benötigte Zeit: {(Math.floor(timeInState / 100)/10).toFixed(1)} s </p>
                         <p>Daten: {stateData}</p>
+                        <span className={"flex gap-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-amber-900"}>
+                            <AlertTriangle className={"mt-0.5 size-4 shrink-0"}/>
+                            Ein Wechsel im laufenden Spiel kann zu Problemen führen. Zum Abbrechen besser die Spielleitung in der Übersicht nutzen.
+                        </span>
                         <Button onClick={()=>{
                             websocketSendContext?.(JSON.stringify({
                                 action: "switchToState",
@@ -235,6 +240,33 @@ function StateGraph() {
         </div>);
 }
 
+const IDLE_STATES = ["IDLE", "ERROR", "SLEEP"];
+
+// Switching states by hand skips the checks of the game flow, so warn about it, loudest while a game runs
+function StateSwitchWarning() {
+    const game = useContext(GameDataContext);
+    const running = game != null && !IDLE_STATES.includes(game.gameState.stateName);
+    return <div className={`flex w-full max-w-3xl gap-3 rounded-lg border p-3 text-sm ${running
+        ? "border-red-300 bg-red-50 text-red-900"
+        : "border-amber-300 bg-amber-50 text-amber-900"}`}>
+        <AlertTriangle className={"mt-0.5 size-5 shrink-0"}/>
+        <div className={"flex flex-col gap-1"}>
+            <p className={"font-semibold"}>
+                {running ? "Achtung, gerade läuft ein Spiel." : "Achtung beim manuellen Zustandswechsel."}
+            </p>
+            <p>
+                Ein Zustandswechsel greift direkt in den Spielablauf ein. Im laufenden Spiel kann das zu Problemen
+                führen: Der Roboter kann mitten in einer Bewegung sein oder einen Chip im Greifer halten, das digitale
+                Spielfeld passt dann nicht mehr zum echten und der Spieler kann hängen bleiben.
+            </p>
+            <p>
+                Zum Abbrechen oder Eingreifen besser die <Link href={"/"} className={"font-semibold underline"}>Spielleitung
+                in der Übersicht</Link> nutzen, sie wartet sicher das Ende der aktuellen Bewegung ab.
+            </p>
+        </div>
+    </div>;
+}
+
 export default function StatePage() {
 
 
@@ -247,8 +279,9 @@ export default function StatePage() {
             <CardContent>
                <StateGraph />
             </CardContent>
-            <CardFooter className={"flex flex-col gap-2"}>
+            <CardFooter className={"flex flex-col gap-3"}>
                 <p>Tipp: Doppelklicke auf einen Zustand, um zu ihm zu wechseln</p>
+                <StateSwitchWarning />
             </CardFooter>
         </Card>
     </div>

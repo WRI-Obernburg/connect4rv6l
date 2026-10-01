@@ -1,4 +1,4 @@
-export type Winner = "player" | "robot" | "tie";
+export type Winner = "player" | "robot" | "tie" | "aborted";
 
 export interface PlayerView {
     // active: plays now, offered: first in the queue and may start, queued: waits, spectator: only watches

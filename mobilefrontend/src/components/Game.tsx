@@ -197,6 +197,7 @@ function ResultPanel(props: { winner: Winner, cleaning: boolean, children?: Reac
         player: ["Du hast gewonnen!", "Vier in einer Reihe. Glückwunsch!"],
         robot: ["Der Roboter gewinnt.", "Diesmal war er schneller."],
         tie: ["Unentschieden.", "Das Feld ist voll."],
+        aborted: ["Spiel beendet.", "Die Spielleitung hat die Partie abgebrochen."],
     };
     const [title, text] = texts[props.winner];
     return <Panel title={title} text={`${text}${props.cleaning ? " Der Roboter räumt gerade das Spielfeld auf." : ""}`}>

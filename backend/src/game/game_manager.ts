@@ -57,7 +57,8 @@ const PlayerSelect: GameState<void, number> = {
             GameManager.gameEvent.removeListener("stateChange", abortFunction);
 
             if (e instanceof PlayerSelectionAbortError) {
-
+                // aborted because the state changed (e.g. by the game master), not a timeout
+            } else if (String((e as any)?.message ?? "").startsWith("Timed out")) {
                 GameManager.raiseError({
                     errorType: ErrorType.WARNING,
                     description: "Player selection timed out, resetting game.",
@@ -381,6 +382,30 @@ export const gameStates = {
     SLEEP: Sleep
 }
 
+// Game master: a stop requested from the control panel. It waits for a safe point, i.e. no robot movement
+// running and no chip in the gripper, then the board is cleared. `restart` starts the same player again.
+export type PendingStop = { restart: boolean, requestedAt: number };
+let pendingStop: PendingStop | null = null;
+export const getPendingStop = () => pendingStop;
+
+const RUNNING_STATES = ["PLAYER_SELECTION", "GRAP_BLUE_CHIP", "PLACE_BLUE_CHIP", "ROBOT_SELECTION", "GRAP_RED_CHIP", "PLACE_RED_CHIP"];
+// the robot holds a chip after these, the stop has to wait until it is placed
+const GRIPPING_STATES = ["GRAP_BLUE_CHIP", "GRAP_RED_CHIP"];
+const RESULT_STATES = ["PLAYER_WIN", "ROBOT_WIN", "TIE"];
+
+function applyStop(stop: PendingStop) {
+    pendingStop = null;
+    if (!stop.restart) finishGame("aborted");
+    logEvent({
+        errorType: ErrorType.INFO,
+        description: stop.restart ? "Spielleitung: Spiel wird neu gestartet" : "Spielleitung: Spiel abgebrochen",
+        date: new Date().toString()
+    });
+    state.gameStartTime = Date.now();
+    GameManager.switchState(CleanUp);
+    GameManager.handleStateTransition(CleanUp.action(stop.restart), CleanUp);
+}
+
 export let GameManager: {
     currentGameState: GameState<any, any>;
     switchState: Function;
@@ -391,6 +416,8 @@ export let GameManager: {
     gameEvent: EventEmitter;
     raiseError: (error: ErrorDescription) => void;
     applyLock: (reasons: string[]) => void;
+    requestStop: (restart: boolean) => "stopped" | "pending" | "not_running";
+    cancelStop: () => boolean;
 };
 GameManager = {
     currentGameState: Idle,
@@ -406,6 +433,8 @@ GameManager = {
         GameManager.gameEvent.emit("stateChange");
         GameManager.currentGameState.endTime = new Date();
         GameManager.currentGameState = newState;
+        // a requested stop is void once the game has left the running states on its own (clean-up, error, idle)
+        if (!RUNNING_STATES.includes(newState.stateName)) pendingStop = null;
         // back in IDLE the player's turn is over and the next one in the queue gets the offer
         if (newState === Idle) releaseActivePlayer();
         newState.startTime = new Date();
@@ -477,6 +506,14 @@ GameManager = {
             return;
         }
 
+        // game master stop: taken as soon as no movement runs and no chip is gripped; a game that just ended runs
+        // into its result state as usual, which clears the board anyway
+        if (pendingStop && data.canContinue && data.subsequentState != null
+            && !GRIPPING_STATES.includes(callingState.stateName) && !RESULT_STATES.includes(data.subsequentState.stateName)) {
+            applyStop(pendingStop);
+            return;
+        }
+
         if (data.canContinue) {
             if (data.subsequentState != null) {
                 GameManager.switchState(data.subsequentState, data.output);
@@ -484,6 +521,40 @@ GameManager = {
             }
         }
     },
+    /**
+     * Stops the running game from the control panel. While the player chooses, the stop is immediate; while the
+     * robot moves it is taken after the current movement (and after placing a gripped chip).
+     */
+    requestStop: (restart: boolean) => {
+        const name = GameManager.currentGameState.stateName;
+        if (RESULT_STATES.includes(name) && restart) {
+            GameManager.resetGame(true);
+            return "stopped";
+        }
+        if (!RUNNING_STATES.includes(name)) return "not_running";
+        const stop = { restart, requestedAt: Date.now() };
+        if (name === "PLAYER_SELECTION") {
+            applyStop(stop);
+            return "stopped";
+        }
+        pendingStop = stop;
+        logEvent({
+            errorType: ErrorType.INFO,
+            description: "Spielleitung: Spiel wird nach der aktuellen Roboterbewegung beendet",
+            date: new Date().toString()
+        });
+        sendState();
+        return "pending";
+    },
+
+    cancelStop: () => {
+        if (!pendingStop) return false;
+        pendingStop = null;
+        logEvent({ errorType: ErrorType.INFO, description: "Spielleitung: Abbruch zurückgenommen", date: new Date().toString() });
+        sendState();
+        return true;
+    },
+
     raiseError: (error: ErrorDescription) => {
         logEvent(error);
     },
