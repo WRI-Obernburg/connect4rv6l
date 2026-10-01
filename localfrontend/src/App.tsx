@@ -96,6 +96,15 @@ function App() {
     </Layout>
   }
 
+  if (state.stateName === "TEST") {
+    return <Layout>
+      <div className='panel rounded-3xl p-14 flex flex-col justify-center gap-4 max-w-[60vw]'>
+        <h1 className='text-7xl font-extrabold leading-[1.02]'>Der Roboter wird getestet.</h1>
+        <p className='text-wri-grey text-3xl'>Gleich ist er wieder bereit für eine Partie.</p>
+      </div>
+    </Layout>
+  }
+
   if (state.stateName === "SLEEP") {
     return <Layout>
       <div className="flex flex-row items-stretch justify-center gap-10">

@@ -72,6 +72,35 @@ export interface PlayersState {
     lastResult: { winner: "player" | "robot" | "tie", nickname: string, at: number } | null
 }
 
+export type TestMode = "fill" | "clear" | "cycle"
+
+export interface TestConfig {
+    mode: TestMode
+    // only for "cycle"; 0 runs until stopped
+    cycles: number
+    minChips: number
+    maxChips: number
+    pauseSeconds: number
+}
+
+export interface TestStatus {
+    running: boolean
+    phase: "idle" | "init" | "fill" | "clear" | "pause"
+    config: TestConfig | null
+    cycle: number
+    cyclesDone: number
+    chipsPlaced: number
+    chipsRemoved: number
+    targetChips: number
+    startedAt: string | null
+    finishedAt: string | null
+    stopRequested: boolean
+    result: "done" | "stopped" | "aborted" | "failed" | null
+    error: string | null
+    actions: Record<string, { count: number, totalMs: number, minMs: number, maxMs: number }>
+    cycles: Array<{ cycle: number, chips: number, fillMs: number, clearMs: number, finishedAt: string }>
+}
+
 export interface GameData {
     gameState: {
         isPlayerConnected: boolean
@@ -124,6 +153,7 @@ export interface GameData {
         mock?: boolean
     },
     players?: PlayersState,
+    testRun?: TestStatus,
     qrCodeLink: string,
     errors: ErrorDescription[],
     isInternalFrontendConnected: boolean,

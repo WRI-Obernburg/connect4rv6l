@@ -86,6 +86,10 @@ export default function Game(props: { sessionID: string, indoor: boolean }) {
         return <Panel title="Der Roboter macht Pause" text="Das System ist gerade außer Betrieb. Bitte versuche es später noch einmal." />
     }
 
+    if(gameState.stateName === "TEST") {
+        return <Panel title="Der Roboter wird getestet" text="Gleich ist er wieder bereit für eine Partie." />
+    }
+
     if(gameState.stateName === "SLEEP") {
         return <Panel title="Der Roboter schläft" text="Morgen ist er wieder bereit für eine Partie." />
     }

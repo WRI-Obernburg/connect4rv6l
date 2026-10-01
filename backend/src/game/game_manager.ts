@@ -223,37 +223,8 @@ const CleanUp: GameState<boolean, void> = {
     startTime: null,
     endTime: null,
     action: async (instantRestart: boolean) => {
-
-        // PALETTE #EIN counts on for gripping and for putting back alike. Reset the pallets so the chips go back
-        // to the places they were taken from (0 .. n-1) instead of onto places that are still full.
-        await initChipPalletizing();
-
-        // iterate over a copy: the board shown to players and displays loses each chip as soon as the robot took it
-        const board: Record<string, number[]> | null = state.board ? JSON.parse(JSON.stringify(state.board)) : null;
-        for (let i = 0; i < 7; i++) {
-            if (board == null) break;
-            const column = board[i] ?? [];
-            for (let row = column.length - 1; row >= 0; row--) {
-                const element = column[row];
-                await removeFromField(i, column.length - row - 1);
-                const shown = state.board;
-                if (shown?.[i]) {
-                    state.board = {...shown, [i]: shown[i]!.slice(0, row)};
-                    sendState();
-                }
-                if (element === 1) {
-                    await putBackToBlue();
-                } else if (element === 2) {
-                    await putBackToRed();
-                }
-            }
-        }
-
-        // and again afterwards, so the next game starts gripping at place 0 of the refilled magazines
-        await initChipPalletizing();
-
+        await clearPhysicalBoard();
         resetGame();
-        GameManager.isPhysicalBoardCleaned = true;
 
         if (instantRestart) {
             state.gameStartTime = Date.now();
@@ -344,8 +315,58 @@ const Tie: GameState<void, boolean> = {
 }
 
 
+// Test operation from the control panel (fill the board at random and clear it again). No game can be started
+// while it runs; the test runner switches back to IDLE when it is done.
+const TestMode: GameState<void, void> = {
+    stateName: "TEST",
+    expectedDuration: null,
+    startTime: null,
+    endTime: null,
+    action: async () => {
+        return {
+            canContinue: false,
+            subsequentState: null
+        }
+    }
+}
+
+/** Takes every chip on the board back to its magazine, top chip first, and resets the pallets for the next game. */
+export async function clearPhysicalBoard() {
+    // PALETTE #EIN counts on for gripping and for putting back alike. Reset the pallets so the chips go back
+    // to the places they were taken from (0 .. n-1) instead of onto places that are still full.
+    await initChipPalletizing();
+
+    // iterate over a copy: the board shown to players and displays loses each chip as soon as the robot took it
+    const board: Record<string, number[]> | null = state.board ? JSON.parse(JSON.stringify(state.board)) : null;
+    for (let i = 0; i < 7; i++) {
+        if (board == null) break;
+        const column = board[i] ?? [];
+        for (let row = column.length - 1; row >= 0; row--) {
+            const element = column[row];
+            // IZ_Feld counts from the bottom row (the PALETTE_FELD centre point is the lowest position), like the
+            // board's rows do; the top chip has to go first, at its own height
+            await removeFromField(i, row);
+            const shown = state.board;
+            if (shown?.[i]) {
+                state.board = {...shown, [i]: shown[i]!.slice(0, row)};
+                sendState();
+            }
+            if (element === 1) {
+                await putBackToBlue();
+            } else if (element === 2) {
+                await putBackToRed();
+            }
+        }
+    }
+
+    // and again afterwards, so the next game starts gripping at place 0 of the refilled magazines
+    await initChipPalletizing();
+    GameManager.isPhysicalBoardCleaned = true;
+}
+
 export const gameStates = {
     IDLE: Idle,
+    TEST: TestMode,
     PLAYER_SELECTION: PlayerSelect,
     GRAP_BLUE_CHIP: GrapBlueChip,
     PLACE_BLUE_CHIP: PlaceBlueChip,
@@ -497,7 +518,7 @@ GameManager = {
     },
 };
 
-function boardHasChips() {
+export function boardHasChips() {
     return state.board != null && Object.values(state.board as Record<string, number[]>).some((column) => column.length > 0);
 }
 

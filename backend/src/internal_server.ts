@@ -3,6 +3,7 @@ import {getTelemetry, listSymbolsForExplorer, readSymbolsForExplorer} from "./rv
 import {acknowledgeAllInactive, acknowledgeFault, createManualFault, getFaultMemory, updateLock} from "./fault_memory.ts";
 import {getCoincidence, getLogbook, getProgramSource, getSystemInfo, getTasks} from "./rv6l_monitor.ts";
 import {adminQueue, publicQueue, removeFromQueue} from "./players.ts";
+import {abortTest, getTestStatus, requestTestStop, startTest} from "./test_runner.ts";
 import express from 'express';
 import WebSocket from 'ws';
 import {resetGame, setBoard} from './game/game.ts';
@@ -239,6 +240,17 @@ async function handleControlPanelMessage(ws: WebSocket, data: any) {
             removeFromQueue(String(payload.clientId));
             sendState();
         },
+        // test operation: fill the board at random and clear it again, once or as an endurance test
+        async test_start(payload) {
+            const refusal = startTest(payload.config ?? {});
+            if (refusal) logEvent({errorType: ErrorType.WARNING, description: `Test nicht gestartet: ${refusal}`, date: new Date().toString()});
+        },
+        async test_stop() {
+            requestTestStop();
+        },
+        async test_abort() {
+            abortTest();
+        },
         async create_manual_fault(payload) {
             const title = String(payload.title ?? "").trim().slice(0, 200);
             if (!title) return;
@@ -410,6 +422,7 @@ function sendControlPanelState(ws: WebSocket) {
                 telemetry: getTelemetry(),
             },
             faultMemory: getFaultMemory(),
+            testRun: getTestStatus(),
             qrCodeLink: FRONTEND_ADDRESS + "/play?sessionID=" + sessionState.currentSessionID,
             players: adminQueue(),
             errors: errors,

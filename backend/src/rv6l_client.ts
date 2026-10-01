@@ -43,6 +43,8 @@ export let RV6L_STATE = {
 }
 
 export const abortSignal = new EventEmitter();
+// emits "completed" (actionName, durationMs) for every robot action that finished, e.g. for the test statistics
+export const actionEvents = new EventEmitter();
 
 function startAction(actionName: string) {
     RV6L_STATE.actionStartTime = new Date().toString();
@@ -61,6 +63,7 @@ function stopAction(actionName: string) {
         });
         RV6L_STATE.state = "IDLE";
         RV6L_STATE.rv6l_moving = false;
+        actionEvents.emit("completed", actionName, duration);
         sendStateToControlPanelClient?.();
     }
 }
@@ -573,10 +576,15 @@ export async function getSymbolList(type: SymbolListType): Promise<string[]> {
 }
 
 // Only while the robot is standing still, opening the gripper during a movement would drop the chip
+// Switching the suction cup by hand must always work, also while an action runs or I_Aktion is not 0, e.g. to
+// drop a chip after an aborted action. So it does not go through runAction and its checks.
 export async function toggleGripper(on: boolean) {
-    await runAction(on ? "GripperOn" : "GripperOff", async () => {
-        await writeVariableInProc("_IBIN_OUT[6]", on ? "1" : "0");
-    });
+    logEvent({errorType: ErrorType.INFO, description: `Sauger von Hand ${on ? "ein" : "aus"}geschaltet`, date: new Date().toString()});
+    if (RV6L_STATE.mock) return;
+    if (!RV6L_STATE.rv6l_connected) throw new Error("RV6L is not connected");
+    // _IBIN_OUT[6] holds output bytes 20 to 23; only bit 0 (byte 20 bit 0) is the suction cup, keep the other outputs
+    const outputs = Number(await readVariableInProc("_IBIN_OUT[6]"));
+    await writeVariableInProc("_IBIN_OUT[6]", String(on ? outputs | 1 : outputs & ~1));
 }
 
 function getNextMessageId(): number {
