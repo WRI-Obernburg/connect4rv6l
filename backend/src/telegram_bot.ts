@@ -1,15 +1,18 @@
 import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname } from "path";
-import { faultEvents, getFaultMemory, type FaultEntry } from "./fault_memory.ts";
+import { createManualFault, faultEvents, getFaultMemory, type FaultEntry } from "./fault_memory.ts";
 import { sendState, state } from "./state.ts";
 import { RV6L_STATE } from "./rv6l_client.ts";
 import { GameManager, gameStates } from "./game/game_manager.ts";
+import { publicQueue } from "./players.ts";
 import { ErrorType, logEvent } from "./errorHandler/error_handler.ts";
 
 /**
- * Telegram bot that pushes critical faults to every approved contact, and an all-clear once the game is free
- * again. Approved contacts can also send the robot to sleep and wake it up. It polls the Bot API (long polling),
- * so it needs no open port or webhook on the Pi.
+ * Telegram bot for the RV6L. Every approved contact
+ * - gets a push for every critical fault and an all-clear once the game is free again,
+ * - has a status message pinned at the top of the chat that the bot keeps up to date,
+ * - can use /status, /sleep and /wake (also as buttons) and lock the game with /error <message>.
+ * It polls the Bot API (long polling), so it needs no open port or webhook on the Pi.
  *
  * Whoever writes /start is only a request: the contact gets nothing until it is approved in the control panel,
  * so not everyone who finds the bot receives the faults of the robot or can control it.
@@ -24,14 +27,41 @@ const FILE = process.env.TELEGRAM_SUBSCRIBERS_FILE || "logs/telegram_subscribers
 // the same fault (e.g. a flapping connection) is pushed at most once in this time
 const REPEAT_AFTER_MS = 15 * 60 * 1000;
 const POLL_TIMEOUT_S = 50;
+// how often the pinned status is compared with the current one; Telegram allows about one edit per second per chat
+const STATUS_CHECK_MS = 3000;
 
-export type TelegramContact = { chatId: number, name: string, requestedAt: string, approvedAt?: string };
+export type TelegramContact = {
+    chatId: number,
+    name: string,
+    requestedAt: string,
+    // not set while the contact waits for approval
+    approvedAt?: string,
+    // the pinned message that shows the live status
+    statusMessageId?: number,
+};
 
 let contacts: TelegramContact[] = [];
 let connected = false;
+let shownStatus = "";
 const lastSent = new Map<string, number>();
 
 const isApproved = (chatId: number) => contacts.some((c) => c.chatId === chatId && c.approvedAt);
+
+// buttons below the input field, so the common commands need no typing
+const BUTTONS = { status: "📊 Status", sleep: "😴 Schlafen", wake: "☀️ Aufwecken" };
+const KEYBOARD = {
+    keyboard: [[{ text: BUTTONS.status }], [{ text: BUTTONS.sleep }, { text: BUTTONS.wake }]],
+    resize_keyboard: true,
+    is_persistent: true,
+};
+const COMMANDS = [
+    { command: "status", description: "Aktueller Zustand" },
+    { command: "sleep", description: "Roboter schlafen legen (nur aus IDLE)" },
+    { command: "wake", description: "Roboter aufwecken" },
+    { command: "error", description: "Spiel sofort sperren: /error <Meldung>" },
+    { command: "stop", description: "Abmelden" },
+];
+const HELP = "/status – aktueller Zustand\n/sleep – Roboter schlafen legen (nur aus IDLE)\n/wake – Roboter aufwecken\n/error &lt;Meldung&gt; – Spiel sofort sperren\n/stop – abmelden";
 
 /** For the control panel: whether the bot runs and who is approved or waits for approval. */
 export function getTelegramState() {
@@ -57,6 +87,10 @@ export function initTelegramBot() {
     faultEvents.on("unlocked", () => {
         broadcast("✅ <b>RV6L wieder freigegeben</b>\nKeine offenen kritischen Fehler mehr, das Spiel ist wieder spielbar.");
     });
+    // tells the control panel right away whether the token works, the first long poll may take 50 s
+    call("getMe").then(() => setConnected(true)).catch((error) => console.error("Telegram getMe failed", String(error)));
+    call("setMyCommands", { commands: COMMANDS }).catch((error) => console.error("Telegram setMyCommands failed", String(error)));
+    setInterval(() => updatePinnedStatus().catch((error) => console.error("Telegram status update failed", String(error))), STATUS_CHECK_MS);
     poll();
 }
 
@@ -66,7 +100,8 @@ export async function approveContact(chatId: number) {
     contact.approvedAt = new Date().toISOString();
     changed();
     logEvent({ errorType: ErrorType.INFO, description: `Telegram: ${contact.name} freigegeben`, date: new Date().toString() });
-    await send(chatId, `✅ Du bist freigegeben. Ab jetzt bekommst du eine Nachricht, sobald am RV6L ein kritischer Fehler auftritt.\n\n${HELP}`).catch(() => {});
+    await send(chatId, `✅ Du bist freigegeben. Ab jetzt bekommst du eine Nachricht, sobald am RV6L ein kritischer Fehler auftritt. Oben im Chat ist der aktuelle Status angepinnt.\n\n${HELP}`, KEYBOARD).catch(() => {});
+    await pinStatus(contact).catch((error) => console.error(`Telegram pin for ${contact.name} failed`, String(error)));
 }
 
 export async function removeContact(chatId: number) {
@@ -77,10 +112,8 @@ export async function removeContact(chatId: number) {
     logEvent({ errorType: ErrorType.INFO, description: `Telegram: ${contact.name} entfernt`, date: new Date().toString() });
     await send(chatId, contact.approvedAt
         ? "Du wurdest von den RV6L-Benachrichtigungen abgemeldet."
-        : "Deine Anfrage für RV6L-Benachrichtigungen wurde abgelehnt.").catch(() => {});
+        : "Deine Anfrage für RV6L-Benachrichtigungen wurde abgelehnt.", { remove_keyboard: true }).catch(() => {});
 }
-
-const HELP = "/status – aktueller Zustand\n/sleep – Roboter schlafen legen (nur aus IDLE)\n/wake – Roboter aufwecken\n/stop – abmelden";
 
 async function poll() {
     let offset = 0;
@@ -102,14 +135,17 @@ async function poll() {
 
 async function handleMessage(message: any) {
     const chatId: number = message.chat.id;
-    // in groups commands come as /start@botname
-    const command = String(message.text).trim().split(/\s+/)[0]!.split("@")[0];
+    const text = String(message.text).trim();
+    // in groups commands come as /start@botname; the buttons send their label
+    const command = ({ [BUTTONS.status]: "/status", [BUTTONS.sleep]: "/sleep", [BUTTONS.wake]: "/wake" } as Record<string, string>)[text]
+        ?? text.split(/\s+/)[0]!.split("@")[0];
+    const argument = text.slice(text.split(/\s+/)[0]!.length).trim();
     const person = [message.from?.first_name, message.from?.last_name].filter(Boolean).join(" ");
     const name: string = message.chat.title ?? (person || String(chatId));
 
     if (command === "/start") {
         if (isApproved(chatId)) {
-            await send(chatId, `Du bist bereits freigegeben.\n\n${HELP}`);
+            await send(chatId, `Du bist bereits freigegeben.\n\n${HELP}`, KEYBOARD);
             return;
         }
         if (!contacts.some((c) => c.chatId === chatId)) {
@@ -127,7 +163,7 @@ async function handleMessage(message: any) {
             changed();
             logEvent({ errorType: ErrorType.INFO, description: `Telegram: ${name} hat sich abgemeldet`, date: new Date().toString() });
         }
-        await send(chatId, "Abgemeldet, du bekommst keine Nachrichten mehr. Mit /start kannst du eine neue Freigabe anfragen.");
+        await send(chatId, "Abgemeldet, du bekommst keine Nachrichten mehr. Mit /start kannst du eine neue Freigabe anfragen.", { remove_keyboard: true });
         return;
     }
     if (!isApproved(chatId)) {
@@ -146,8 +182,11 @@ async function handleMessage(message: any) {
         case "/wake":
             await send(chatId, switchSleep(false, name));
             return;
+        case "/error":
+            await send(chatId, raiseError(argument, name));
+            return;
         default:
-            await send(chatId, HELP);
+            await send(chatId, HELP, KEYBOARD);
     }
 }
 
@@ -163,6 +202,66 @@ function switchSleep(sleep: boolean, name: string) {
     GameManager.handleStateTransition(target.action(undefined), target);
     return sleep ? "😴 Der Roboter schläft jetzt, es kann kein Spiel gestartet werden." : "☀️ Der Roboter ist wach und bereit für Spiele.";
 }
+
+// Locks the game at any time like a fault created by hand in the control panel; it is acknowledged there
+function raiseError(message: string, name: string) {
+    const title = message.slice(0, 200);
+    if (!title) return "Bitte eine Meldung angeben, z. B. <code>/error Spielfeld klemmt</code>";
+    createManualFault(title, `Per Telegram von ${name}`, true);
+    return `🔴 Spiel gesperrt: <b>${escape(title)}</b>\nDer Roboter beendet nur noch seine aktuelle Bewegung. Freigeben durch Quittieren im Control Panel unter Fehlerspeicher.`;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Pinned live status: one message per contact, edited whenever the status text changes
+
+function liveStatus() {
+    const name = GameManager.currentGameState.stateName;
+    const memory = getFaultMemory();
+    const chips = state.board ? Object.values(state.board).reduce((sum, column) => sum + column.length, 0) : 0;
+    const player = publicQueue().active?.nickname;
+    let head: string;
+    if (name === "ERROR") head = "🔴 <b>Gesperrt</b>";
+    else if (name === "IDLE") head = "🟢 <b>Bereit</b>";
+    else if (name === "SLEEP") head = "😴 <b>Schläft</b>";
+    else if (name === "TEST") head = "🧪 <b>Testbetrieb</b>";
+    else if (name === "CLEAN_UP") head = "🧹 <b>Spielfeld wird geleert</b>";
+    else head = `🎮 <b>Partie läuft</b>${player ? ` (${escape(player)})` : ""}`;
+    const lines = [`RV6L: ${head}`, `Zustand: ${escape(name)} · ${chips} Chips im Feld`];
+    if (!RV6L_STATE.mock && !RV6L_STATE.rv6l_connected) lines.push("⚠️ Keine Verbindung zur Robotersteuerung");
+    if (memory.lockReasons.length) lines.push(...memory.lockReasons.map((reason) => `• ${escape(reason)}`));
+    return lines.join("\n");
+}
+
+async function updatePinnedStatus() {
+    const status = liveStatus();
+    if (status === shownStatus) return;
+    shownStatus = status;
+    for (const contact of contacts.filter((c) => c.approvedAt)) {
+        await pinStatus(contact).catch((error) => console.error(`Telegram status for ${contact.name} failed`, String(error)));
+    }
+}
+
+async function pinStatus(contact: TelegramContact) {
+    const text = `${shownStatus || liveStatus()}\n<i>Stand ${time(new Date().toISOString())}</i>`;
+    if (contact.statusMessageId) {
+        try {
+            await call("editMessageText", { chat_id: contact.chatId, message_id: contact.statusMessageId, text, parse_mode: "HTML" });
+            return;
+        } catch (error) {
+            if (/not modified/i.test(String(error))) return;
+            // deleted by the user: post and pin a new one
+            if (!/not found|can't be edited/i.test(String(error))) throw error;
+        }
+    }
+    const message = await call("sendMessage", { chat_id: contact.chatId, text, parse_mode: "HTML", disable_notification: true });
+    contact.statusMessageId = message.message_id;
+    changed();
+    // in groups the bot needs the right to pin; the status message is still sent without it
+    await call("pinChatMessage", { chat_id: contact.chatId, message_id: message.message_id, disable_notification: true })
+        .catch((error) => console.error(`Telegram pin for ${contact.name} failed`, String(error)));
+}
+
+// ---------------------------------------------------------------------------------------------
 
 function faultMessage(entry: FaultEntry) {
     const lines = [
@@ -206,11 +305,11 @@ function broadcast(text: string) {
     }
 }
 
-async function send(chatId: number, text: string) {
-    await call("sendMessage", { chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true });
+async function send(chatId: number, text: string, replyMarkup?: object) {
+    await call("sendMessage", { chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true, reply_markup: replyMarkup });
 }
 
-async function call(method: string, body: object, timeoutMs = 15_000): Promise<any> {
+async function call(method: string, body: object = {}, timeoutMs = 15_000): Promise<any> {
     const response = await fetch(`${API}/${method}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -239,7 +338,7 @@ function changed() {
 }
 
 function time(iso: string) {
-    return new Date(iso).toLocaleString("de-DE", { timeZone: "Europe/Berlin", dateStyle: "short", timeStyle: "medium" });
+    return new Date(iso).toLocaleString("de-DE", { timeZone: "Europe/Berlin", dateStyle: "short", timeStyle: "short" });
 }
 
 // Telegram HTML: only these three characters must be escaped

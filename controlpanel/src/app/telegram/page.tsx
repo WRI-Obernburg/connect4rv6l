@@ -26,9 +26,11 @@ export default function TelegramPage() {
                 <CardTitle>Telegram-Benachrichtigungen</CardTitle>
                 <p className={"text-sm text-gray-500"}>
                     Freigegebene Kontakte bekommen bei jedem kritischen Fehler eine Nachricht (derselbe Fehler höchstens alle
-                    15 Minuten) und eine Entwarnung, sobald das Spiel wieder frei ist. Sie können außerdem mit /status den
-                    Zustand abfragen und den Roboter mit /sleep schlafen legen bzw. mit /wake aufwecken (nur zwischen IDLE und
-                    SLEEP). Wer dem Bot /start schreibt, erscheint hier und bekommt erst nach der Freigabe Nachrichten.
+                    15 Minuten) und eine Entwarnung, sobald das Spiel wieder frei ist. Oben im Chat ist eine Statusnachricht
+                    angepinnt, die der Bot laufend aktualisiert. Mit /status fragen sie den Zustand ab, mit /sleep und /wake
+                    legen sie den Roboter schlafen bzw. wecken ihn (nur zwischen IDLE und SLEEP), und mit /error &lt;Meldung&gt;
+                    sperren sie das Spiel jederzeit, bis der Fehler hier im Fehlerspeicher quittiert ist. Wer dem Bot /start
+                    schreibt, erscheint hier und bekommt erst nach der Freigabe Nachrichten.
                 </p>
                 {!telegram?.enabled
                     ? <div className={"mt-2 rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-900"}>
