@@ -81,7 +81,7 @@ export default function TestPage() {
                 <CardTitle>Testbetrieb</CardTitle>
                 <p className={"text-sm text-gray-500"}>
                     Bestückt das Spielfeld zufällig und räumt es mit denselben Roboteraktionen wie im Spiel wieder auf. Die Chips
-                    werden wie im Spiel abwechselnd blau und rot eingeworfen, beginnend mit Blau. Solange der Test läuft, steht das
+                    werden wie im Spiel abwechselnd aus beiden Magazinen eingeworfen, beginnend mit dem Chip des Spielers. Solange der Test läuft, steht das
                     Spiel im Zustand TEST und niemand kann eine Partie starten. Jeder Fehler einer Roboteraktion beendet den Test.
                 </p>
                 {gameData.rv6l.mock && <div className={"mt-2 rounded-md border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-900"}>
@@ -236,13 +236,13 @@ function Statistics({test}: { test: TestStatus }) {
     </Card>;
 }
 
-// 1 is the player's blue chip, 2 the robot's red one; row 0 is the bottom row
+// same colors as the other boards: 1 (the player's chip) red, 2 (the robot's) blue; row 0 is the bottom row
 function Board({board}: { board: Record<string, number[]> | null }) {
     return <div className={"flex justify-center gap-1.5 self-center rounded-lg border border-gray-300 p-2"}>
         {Array.from({length: 7}).map((_, column) => <div key={column} className={"flex flex-col gap-1.5"}>
             {Array.from({length: 6}).map((_, i) => {
                 const chip = board?.[column]?.[5 - i];
-                const color = chip === 1 ? "bg-blue-500" : chip === 2 ? "bg-red-500" : "bg-gray-100";
+                const color = chip === 1 ? "bg-red-500" : chip === 2 ? "bg-blue-500" : "bg-gray-100";
                 return <div key={i} className={`h-8 w-8 rounded-full border border-gray-400 ${color}`}/>;
             })}
         </div>)}

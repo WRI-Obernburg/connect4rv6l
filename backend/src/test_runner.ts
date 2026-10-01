@@ -9,7 +9,8 @@ import {ErrorType, logEvent} from "./errorHandler/error_handler.ts";
  * robot actions a game uses, once or as an endurance test. The game is in the state TEST meanwhile, so nobody can
  * start a game, and every failed action stops the test like it would stop a game.
  *
- * Chips alternate blue/red starting with blue like in a game, so neither magazine (21 chips each) runs empty.
+ * Chips alternate between the two magazines starting with the player's like in a game, so neither magazine
+ * (21 chips each) runs empty.
  */
 
 export type TestMode = "fill" | "clear" | "cycle";
@@ -153,7 +154,7 @@ async function fill(chips: number) {
         const board: Record<string, number[]> = state.board!;
         const free: number[] = Object.keys(board).map(Number).filter((column) => board[column]!.length < 6);
         const column: number = free[randomInt(0, free.length - 1)]!;
-        // 1 is the player's blue, 2 the robot's red, like in a game
+        // 1 is the player's chip (I_Aktion 11/12), 2 the robot's (21/22), like in a game
         const color = i % 2 === 0 ? 1 : 2;
         await (color === 1 ? moveToBlue() : moveToRed());
         ensureStillInTest();
