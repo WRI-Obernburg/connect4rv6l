@@ -524,8 +524,13 @@ async function initSymTable() {
     await sendCommand(`<symbolApi><initSymbolTable/></symbolApi>`, 30000);
 }
 
+// inside a robot action: an action aborted from the control panel must not send further commands
 async function writeVariableInProc(name: string, value: string) {
     throwIfAborted();
+    await writeSymbol(name, value);
+}
+
+async function writeSymbol(name: string, value: string) {
     await sendCommand(`<symbolApi><writeSymbolValue><name>${escapeXml(name)}</name><value>${escapeXml(value)}</value></writeSymbolValue></symbolApi>`);
 }
 
@@ -584,7 +589,8 @@ export async function toggleGripper(on: boolean) {
     if (!RV6L_STATE.rv6l_connected) throw new Error("RV6L is not connected");
     // _IBIN_OUT[6] holds output bytes 20 to 23; only bit 0 (byte 20 bit 0) is the suction cup, keep the other outputs
     const outputs = Number(await readVariableInProc("_IBIN_OUT[6]"));
-    await writeVariableInProc("_IBIN_OUT[6]", String(on ? outputs | 1 : outputs & ~1));
+    // without the abort check of the actions: right after an abort the suction cup must still be switchable
+    await writeSymbol("_IBIN_OUT[6]", String(on ? outputs | 1 : outputs & ~1));
 }
 
 function getNextMessageId(): number {
