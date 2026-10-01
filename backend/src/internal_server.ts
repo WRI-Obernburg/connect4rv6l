@@ -5,6 +5,7 @@ import {getCoincidence, getLogbook, getProgramSource, getSystemInfo, getTasks} f
 import {adminQueue, moveInQueue, publicQueue, removeFromQueue, renewOffer} from "./players.ts";
 import {placeChipForPlayer} from "./game_server.ts";
 import {abortTest, getTestStatus, requestTestStop, startTest} from "./test_runner.ts";
+import {approveContact, getTelegramState, removeContact} from "./telegram_bot.ts";
 import express from 'express';
 import WebSocket from 'ws';
 import {resetGame, setBoard} from './game/game.ts';
@@ -278,6 +279,13 @@ async function handleControlPanelMessage(ws: WebSocket, data: any) {
         async test_abort() {
             abortTest();
         },
+        // Telegram contacts get notifications and may use the bot only after approval here
+        async telegram_approve(payload) {
+            await approveContact(Number(payload.chatId));
+        },
+        async telegram_remove(payload) {
+            await removeContact(Number(payload.chatId));
+        },
         async create_manual_fault(payload) {
             const title = String(payload.title ?? "").trim().slice(0, 200);
             if (!title) return;
@@ -451,6 +459,7 @@ function sendControlPanelState(ws: WebSocket) {
             },
             faultMemory: getFaultMemory(),
             testRun: getTestStatus(),
+            telegram: getTelegramState(),
             qrCodeLink: FRONTEND_ADDRESS + "/play?sessionID=" + sessionState.currentSessionID,
             players: adminQueue(),
             errors: errors,

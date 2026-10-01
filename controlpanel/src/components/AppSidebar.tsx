@@ -1,5 +1,5 @@
 "use client";
-import {Calendar, Home, Inbox, MonitorCog, Monitor, Orbit, Search, Settings, ShieldAlert, SquareChartGantt, Gamepad, Package, Info, TriangleAlert, Activity, FlaskConical} from "lucide-react"
+import {Calendar, Home, Inbox, MonitorCog, Monitor, Orbit, Search, Settings, ShieldAlert, SquareChartGantt, Gamepad, Package, Info, TriangleAlert, Activity, FlaskConical, Send} from "lucide-react"
 
 import {
     Sidebar,
@@ -59,6 +59,11 @@ const items = [
         title: "Testbetrieb",
         url: "/test/",
         icon: FlaskConical,
+    },
+    {
+        title: "Telegram",
+        url: "/telegram/",
+        icon: Send,
     },
     {
         title: "Display",

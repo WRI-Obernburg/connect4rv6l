@@ -101,6 +101,14 @@ export interface TestStatus {
     cycles: Array<{ cycle: number, chips: number, fillMs: number, clearMs: number, finishedAt: string }>
 }
 
+export interface TelegramContact {
+    chatId: number
+    name: string
+    requestedAt: string
+    // not set while the contact waits for approval
+    approvedAt?: string
+}
+
 export interface GameData {
     gameState: {
         isPlayerConnected: boolean
@@ -156,6 +164,7 @@ export interface GameData {
     },
     players?: PlayersState,
     testRun?: TestStatus,
+    telegram?: { enabled: boolean, connected: boolean, contacts: TelegramContact[] },
     qrCodeLink: string,
     errors: ErrorDescription[],
     isInternalFrontendConnected: boolean,

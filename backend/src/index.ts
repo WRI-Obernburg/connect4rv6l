@@ -4,6 +4,7 @@ import {initRV6LClient} from "./rv6l_client.ts";
 import {initTelemetry} from "./rv6l_telemetry.ts";
 import {initFaultMemory} from "./fault_memory.ts";
 import {ErrorType, initErrorHandler, logEvent} from "./errorHandler/error_handler.ts";
+import {initTelegramBot} from "./telegram_bot.ts";
 
 export const FRONTEND_ADDRESS = process.env.FRONTEND_ADDRESS || "http://localhost:8080";
 
@@ -18,4 +19,5 @@ initRV6LClient();
 initTelemetry();
 initServer();
 initInternalServer();
+initTelegramBot();
 

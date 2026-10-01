@@ -1,3 +1,4 @@
+import { EventEmitter } from "events";
 import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname } from "path";
 import { ErrorType, logEvent } from "./errorHandler/error_handler.ts";
@@ -40,6 +41,14 @@ const HISTORY_LIMIT = 100;
 
 let open: FaultEntry[] = [];
 let acknowledged: FaultEntry[] = [];
+let wasLocked = false;
+
+/**
+ * "critical" (entry): a critical fault was stored that locks the game, also when it occurs again.
+ * "unlocked": no critical fault is open any more, the game is free again.
+ * Used for notifications, e.g. the Telegram bot.
+ */
+export const faultEvents = new EventEmitter();
 
 export function initFaultMemory() {
     try {
@@ -51,6 +60,7 @@ export function initFaultMemory() {
         open = [];
         acknowledged = [];
     }
+    wasLocked = getLockReasons().length > 0;
 }
 
 export function getFaultMemory() {
@@ -135,6 +145,8 @@ function store(key: string, info: FaultInfo, active: boolean) {
             date: now
         });
     }
+    const stored = open.find((e) => e.key === key)!;
+    if (info.critical && !(RV6L_STATE.mock && isHardwareFault(stored))) faultEvents.emit("critical", { ...stored });
     changed();
 }
 
@@ -168,4 +180,7 @@ function changed() {
     }
     sendState();
     updateLock();
+    const locked = getLockReasons().length > 0;
+    if (wasLocked && !locked) faultEvents.emit("unlocked");
+    wasLocked = locked;
 }
