@@ -15,6 +15,8 @@ import { v4 as uuidv4 } from 'uuid';
 function App() {
   const [qrCodeLink, setQrCodeLink] = useState<string | null>(null);
   const [state, setState] = useState<GameState | null>(null);
+  // number of players waiting in the queue, shown next to the small QR code during a game
+  const [waiting, setWaiting] = useState(0);
   const indoor = useQueryParam('indoor') != null;
   const [frontendID, setFrontendID] = useState<string>(window.localStorage.getItem("frontendID") ?? uuidv4());
   const [identifyMode, setIdentifyMode] = useState<boolean>(false);
@@ -45,6 +47,9 @@ function App() {
             }
             if (data.gameState) {
                 setState(data.gameState);
+            }
+            if (data.players) {
+                setWaiting(data.players.queue?.length ?? 0);
             }
         }else if(data.action === "identifyStart") {
             setIdentifyMode(true);
@@ -127,7 +132,7 @@ function App() {
 
   return (
     <Layout>
-      <Game gameState={state} indoor={indoor} qrCodeLink={qrCodeLink! + (indoor ? "&indoor" : "")}></Game>
+      <Game gameState={state} indoor={indoor} waiting={waiting} qrCodeLink={qrCodeLink! + (indoor ? "&indoor" : "")}></Game>
     </Layout>
   )
 }

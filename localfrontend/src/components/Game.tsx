@@ -2,7 +2,7 @@ import QRCode from "react-qr-code"
 import type { GameState } from "../session"
 import {GameField} from "./GameField";
 
-export default function Game(props: { gameState: GameState, qrCodeLink: string, indoor: boolean }) {
+export default function Game(props: { gameState: GameState, qrCodeLink: string, indoor: boolean, waiting: number }) {
 
     let gameBoard = props.gameState.board;
     if(!props.indoor && gameBoard) {
@@ -30,9 +30,25 @@ export default function Game(props: { gameState: GameState, qrCodeLink: string, 
             {gameOver
                 ? <div className="flex items-center gap-8 mt-8">
                     <div className="bg-white rounded-2xl p-4"><QRCode value={props.qrCodeLink} fgColor="#0d4453" bgColor="transparent" size={200}></QRCode></div>
-                    <p className="text-3xl font-semibold leading-tight max-w-[14ch]">Revanche? Code scannen und neu starten.</p>
+                    {/* with people waiting the next one in the queue plays, a rematch is only possible without */}
+                    <div>
+                        <p className="text-3xl font-semibold leading-tight max-w-[16ch]">
+                            {props.waiting > 0 ? "Mitspielen? Code scannen und anstellen." : "Revanche? Code scannen und neu starten."}
+                        </p>
+                        {props.waiting > 0 && <p className="text-2xl text-wri-grey mt-3"><Waiting count={props.waiting}/></p>}
+                    </div>
                   </div>
-                : <p className="text-2xl text-wri-grey mt-8">Schwierigkeit: <DisplayDifficulty difficulty={props.gameState.difficulty}/></p>}
+                : <div className="mt-8 flex flex-col gap-6">
+                    <p className="text-2xl text-wri-grey">Schwierigkeit: <DisplayDifficulty difficulty={props.gameState.difficulty}/></p>
+                    {/* the next ones can queue up on their phone while this game runs */}
+                    <div className="flex items-center gap-6">
+                        <div className="bg-white rounded-xl p-2"><QRCode value={props.qrCodeLink} fgColor="#0d4453" bgColor="transparent" size={110}></QRCode></div>
+                        <div>
+                            <p className="text-2xl font-semibold leading-tight">Mitspielen? Code scannen und anstellen.</p>
+                            <p className="text-xl text-wri-grey mt-1"><Waiting count={props.waiting}/></p>
+                        </div>
+                    </div>
+                  </div>}
         </div>
     </div>
 }
@@ -54,6 +70,11 @@ function CurrentAction(props: { gameState: GameState }) {
         <p className={`text-7xl font-extrabold tracking-[-0.02em] leading-[1.02] ${accent ? "text-wri-cyan-dark" : ""}`}>{title}</p>
         <p className="text-3xl text-wri-grey mt-5">{hint}</p>
     </>
+}
+
+function Waiting(props: { count: number }) {
+    if (props.count === 0) return <>Noch niemand wartet.</>;
+    return <>{props.count === 1 ? "Eine Person wartet" : `${props.count} Personen warten`}.</>;
 }
 
 function DisplayDifficulty(props: {difficulty: string}) {
